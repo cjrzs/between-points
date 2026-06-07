@@ -67,6 +67,7 @@ button {
   color: var(--text);
   background: var(--button-bg);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 button:hover { border-color: rgba(57, 213, 255, 0.55); }
@@ -177,20 +178,44 @@ label span {
   margin-bottom: 18px;
 }
 
+.topbar > div:first-child {
+  flex: 0 1 auto;
+  min-width: 150px;
+}
+
 .topbar h1 { margin: 0; font-size: 30px; }
-.top-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.top-actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
 .compact { min-width: 120px; }
+
+.top-actions > .compact {
+  flex: 0 0 132px;
+}
+
+.top-actions > button {
+  flex: 0 0 auto;
+}
 
 .range-control {
   display: grid;
-  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  grid-template-columns: repeat(2, 176px);
   gap: 8px;
-  min-width: min(330px, 100%);
+  flex: 0 0 auto;
 }
 
 .range-control label { min-width: 0; }
 
 .account-chip {
+  flex: 0 0 auto;
   min-height: 38px;
   display: inline-flex;
   align-items: center;
