@@ -169,15 +169,12 @@ function App() {
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             {data.user ? (
-              <>
-                <span className="account-chip" data-auth="authenticated">{data.user.account}</span>
-                <button className="icon-button" title={t("logout")} onClick={() => {
-                  localStorage.removeItem("betweenPoints.userId");
-                  setData(initialData);
-                }}>
-                  <LogOut size={18} />
-                </button>
-              </>
+              <button className="icon-button" title={t("logout")} onClick={() => {
+                localStorage.removeItem("betweenPoints.userId");
+                setData(initialData);
+              }}>
+                <LogOut size={18} />
+              </button>
             ) : (
               <button className="account-chip" data-auth="anonymous" onClick={() => setLoginOpen(true)}>
                 <LogIn size={17} />{t("loginAction")}

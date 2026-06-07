@@ -67,7 +67,13 @@ async function main() {
     })()
   `);
   await waitFor(page, "!document.querySelector('.login-modal')");
-  await waitFor(page, `document.querySelector('.account-chip')?.textContent.includes(${JSON.stringify(account)})`);
+  await waitFor(page, `document.querySelector('.eyebrow')?.textContent.includes(${JSON.stringify(account)})`);
+  await waitFor(page, `
+    (() => {
+      const actions = document.querySelector('.top-actions');
+      return actions && !actions.textContent.includes(${JSON.stringify(account)}) && actions.querySelector('button[title]');
+    })()
+  `);
 
   await page.evaluate(`
     (() => {
@@ -108,7 +114,7 @@ async function main() {
     })()
   `);
   await waitFor(page, "document.querySelector('.control-panel')");
-  await waitFor(page, "document.querySelector('.account-chip')?.dataset.auth === 'authenticated'");
+  await waitFor(page, "!document.querySelector('.account-chip') && document.querySelector('.top-actions button[title]')");
 
   await page.evaluate(`
     (() => {
