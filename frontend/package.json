@@ -1,0 +1,18 @@
+{
+  "name": "between-points-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite --host 0.0.0.0",
+    "check": "vite build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.5.0",
+    "vite": "^6.3.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {}
+}
