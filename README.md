@@ -2,6 +2,8 @@
 
 React + Python + PostgreSQL weight tracking app for daily check-ins, trend analysis, Excel import, and optional image parsing.
 
+Users can browse an empty dashboard before logging in. Mutating actions open a login modal, date views are constrained to a six-month range, and the interface supports dark and light themes.
+
 ## Stack
 
 - Frontend: React, Vite, Nginx
@@ -41,4 +43,3 @@ Without these values, image import falls back to local OCR-style parsing heurist
 python -m unittest discover -s tests
 node tests\browser_smoke.mjs
 ```
-

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BarChart3, Database, Download, History, Languages, LogOut, Save, Trash2, Upload, Gauge } from "lucide-react";
+import { BarChart3, Database, Download, History, Languages, LogIn, LogOut, Moon, Save, Sun, Trash2, Upload, Gauge } from "lucide-react";
 import { dictionaries } from "./i18n.js";
 import "./styles.css";
 
@@ -49,6 +49,18 @@ const initialData = {
   analysis: {}
 };
 
+function anonymousData(language) {
+  return {
+    ...initialData,
+    user: {
+      id: "",
+      account: "Guest",
+      language,
+      targetWeightKg: 68,
+    },
+  };
+}
+
 function App() {
   const [data, setData] = useState(initialData);
   const [route, setRoute] = useState("dashboard");
@@ -56,11 +68,19 @@ function App() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
   const [draftRows, setDraftRows] = useState([]);
-  const [displayEndDate, setDisplayEndDate] = useState("");
+  const [displayRangeDraft, setDisplayRangeDraft] = useState({ start: "", end: "" });
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem("betweenPoints.theme") || "dark");
   const language = data.user?.language || localStorage.getItem("betweenPoints.lang") || browserLanguage();
   const t = (key) => (dictionaries[language] || dictionaries.zh)[key] || key;
-  const displayRange = useMemo(() => getDisplayRange(data.records, displayEndDate), [data.records, displayEndDate]);
-  const displayData = useMemo(() => applyDisplayRange(data, displayRange), [data, displayRange]);
+  const viewData = useMemo(() => data.user ? data : anonymousData(language), [data, language]);
+  const displayRange = useMemo(() => getDisplayRange(viewData.records, displayRangeDraft), [viewData.records, displayRangeDraft]);
+  const displayData = useMemo(() => applyDisplayRange(viewData, displayRange), [viewData, displayRange]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("betweenPoints.theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     const userId = localStorage.getItem("betweenPoints.userId");
@@ -81,8 +101,12 @@ function App() {
     }
   }
 
-  if (!data.user) {
-    return <LoginView t={t} error={error} onLogin={(account, password) => run(async () => applyServerState(await api.login(account, password), setData))} />;
+  function protectedRun(action, toastKey = "") {
+    if (!data.user) {
+      setLoginOpen(true);
+      return;
+    }
+    run(action, toastKey);
   }
 
   const routeTitle = route === "import" ? "importData" : route;
@@ -104,7 +128,7 @@ function App() {
       <main className="main">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{data.user.account}</p>
+            <p className="eyebrow">{data.user ? data.user.account : t("guest")}</p>
             <h1>{t(routeTitle)}</h1>
           </div>
           <div className="top-actions">
@@ -112,7 +136,15 @@ function App() {
               <span><Languages size={14} /> {t("language")}</span>
               <select
                 value={language}
-                onChange={(event) => run(async () => applyServerState(await api.updateUser({ userId: data.user.id, language: event.target.value }), setData))}
+                onChange={(event) => {
+                  const nextLanguage = event.target.value;
+                  if (!data.user) {
+                    localStorage.setItem("betweenPoints.lang", nextLanguage);
+                    setData((current) => ({ ...current }));
+                    return;
+                  }
+                  run(async () => applyServerState(await api.updateUser({ userId: data.user.id, language: nextLanguage }), setData));
+                }}
               >
                 <option value="zh">中文</option>
                 <option value="en">English</option>
@@ -120,38 +152,62 @@ function App() {
             </label>
             <TargetControl
               t={t}
-              user={data.user}
-              onSave={(targetWeightKg) => run(async () => applyServerState(await api.updateUser({ userId: data.user.id, targetWeightKg }), setData), "dataReady")}
+              user={displayData.user}
+              onSave={(targetWeightKg) => protectedRun(async () => applyServerState(await api.updateUser({ userId: data.user.id, targetWeightKg }), setData), "dataReady")}
             />
-            <label className="compact">
-              <span>{t("displayUntil")}</span>
-              <input type="date" value={displayRange.end} onChange={(event) => setDisplayEndDate(event.target.value)} />
-            </label>
-            <button className="icon-button" title={t("logout")} onClick={() => {
-              localStorage.removeItem("betweenPoints.userId");
-              setData(initialData);
-            }}>
-              <LogOut size={18} />
+            <div className="range-control">
+              <label>
+                <span>{t("rangeStart")}</span>
+                <input type="date" value={displayRange.start} onChange={(event) => setDisplayRangeDraft((current) => ({ ...current, start: event.target.value }))} />
+              </label>
+              <label>
+                <span>{t("rangeEnd")}</span>
+                <input type="date" value={displayRange.end} onChange={(event) => setDisplayRangeDraft((current) => ({ ...current, end: event.target.value }))} />
+              </label>
+            </div>
+            <button className="icon-button theme-toggle" title={t("theme")} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
+            {data.user ? (
+              <>
+                <span className="account-chip" data-auth="authenticated">{data.user.account}</span>
+                <button className="icon-button" title={t("logout")} onClick={() => {
+                  localStorage.removeItem("betweenPoints.userId");
+                  setData(initialData);
+                }}>
+                  <LogOut size={18} />
+                </button>
+              </>
+            ) : (
+              <button className="account-chip" data-auth="anonymous" onClick={() => setLoginOpen(true)}>
+                <LogIn size={17} />{t("loginAction")}
+              </button>
+            )}
           </div>
         </header>
         {toast && <p className="toast">{toast}</p>}
         {error && <p className="error">{error}</p>}
-        {route === "dashboard" && <Dashboard data={displayData} t={t} run={run} setData={setData} displayRange={displayRange} />}
+        {route === "dashboard" && <Dashboard data={displayData} t={t} protectedRun={protectedRun} setData={setData} displayRange={displayRange} />}
         {route === "analysis" && <Analysis data={displayData} t={t} />}
-        {route === "history" && <HistoryView data={displayData} t={t} filter={filter} setFilter={setFilter} run={run} setData={setData} />}
-        {route === "import" && <ImportView data={data} t={t} draftRows={draftRows} setDraftRows={setDraftRows} run={run} setData={setData} />}
+        {route === "history" && <HistoryView data={displayData} t={t} filter={filter} setFilter={setFilter} protectedRun={protectedRun} setData={setData} />}
+        {route === "import" && <ImportView data={displayData} t={t} draftRows={draftRows} setDraftRows={setDraftRows} protectedRun={protectedRun} setData={setData} />}
+        {loginOpen && <LoginView t={t} error={error} onCancel={() => setLoginOpen(false)} onLogin={(account, password) => run(async () => {
+          applyServerState(await api.login(account, password), setData);
+          setLoginOpen(false);
+        })} />}
       </main>
     </div>
   );
 }
 
-function LoginView({ t, error, onLogin }) {
+function LoginView({ t, error, onLogin, onCancel }) {
   const [account, setAccount] = useState("");
   const [password, setPassword] = useState("");
   return (
-    <main className="login-page">
-      <section className="login-panel">
+    <div className="login-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onCancel();
+    }}>
+      <section className="login-panel login-modal">
         <div className="brand-block">
           <span className="brand-kicker">{t("appSubtitle")}</span>
           <h1>{t("appName")}</h1>
@@ -164,10 +220,11 @@ function LoginView({ t, error, onLogin }) {
           <label>{t("account")}<input autoComplete="username" required value={account} onChange={(event) => setAccount(event.target.value)} /></label>
           <label>{t("password")}<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           <button className="primary" type="submit">{t("login")}</button>
+          <button className="ghost" type="button" onClick={onCancel}>{t("cancel")}</button>
           {error && <p className="error">{error}</p>}
         </form>
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -189,7 +246,7 @@ function TargetControl({ t, user, onSave }) {
   );
 }
 
-function Dashboard({ data, t, run, setData, displayRange }) {
+function Dashboard({ data, t, protectedRun, setData, displayRange }) {
   const latest = data.records.at(-1) || {};
   const [weightDraft, setWeightDraft] = useState(fmt(latest.weightKg));
   const [visibleWeightSeries, setVisibleWeightSeries] = useState({
@@ -212,7 +269,7 @@ function Dashboard({ data, t, run, setData, displayRange }) {
       <form className="panel control-panel" onSubmit={(event) => {
         event.preventDefault();
         const payload = formRecord(new FormData(event.currentTarget), weightDraft);
-        run(async () => applyServerState(await api.saveRecord({ ...payload, userId: data.user.id }), setData), "saved");
+        protectedRun(async () => applyServerState(await api.saveRecord({ ...payload, userId: data.user.id }), setData), "saved");
       }}>
         <div className="panel-title"><h2>{t("todayCheckin")}</h2><span>{data.records.length} {t("records")}</span></div>
         <div className="form-grid">
@@ -235,7 +292,7 @@ function Dashboard({ data, t, run, setData, displayRange }) {
         <button className="primary" type="submit"><Save size={16} />{t("saveCheckin")}</button>
       </form>
       <section className="panel hero-chart">
-        <div className="panel-title"><h2>{t("trend")}</h2><span>{t("lastThreeMonths")} · {displayRange.start} - {displayRange.end}</span></div>
+        <div className="panel-title"><h2>{t("trend")}</h2><span>{t("lastSixMonths")} · {displayRange.start} - {displayRange.end}</span></div>
         <div className="series-toggles" aria-label={t("trend")}>
           {weightSeriesOptions.map((item) => (
             <button
@@ -322,7 +379,7 @@ function Analysis({ data, t }) {
   );
 }
 
-function HistoryView({ data, t, filter, setFilter, run, setData }) {
+function HistoryView({ data, t, filter, setFilter, protectedRun, setData }) {
   const rows = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     const sorted = [...data.records].sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -335,14 +392,14 @@ function HistoryView({ data, t, filter, setFilter, run, setData }) {
       <div className="table-wrap">
         <table>
           <thead><tr><th>{t("date")}</th><th>{t("weight")}</th><th>{t("food")}</th><th>{t("exerciseCalories")}</th><th>{t("sleep")}</th><th>{t("note")}</th><th /></tr></thead>
-          <tbody>{rows.length ? rows.map((record) => <HistoryRow key={record.date} record={record} data={data} t={t} run={run} setData={setData} />) : <tr><td colSpan="7">{t("noRows")}</td></tr>}</tbody>
+          <tbody>{rows.length ? rows.map((record) => <HistoryRow key={record.date} record={record} data={data} t={t} protectedRun={protectedRun} setData={setData} />) : <tr><td colSpan="7">{t("noRows")}</td></tr>}</tbody>
         </table>
       </div>
     </section>
   );
 }
 
-function HistoryRow({ record, data, t, run, setData }) {
+function HistoryRow({ record, data, t, protectedRun, setData }) {
   const [row, setRow] = useState(rowFromRecord(record));
   useEffect(() => setRow(rowFromRecord(record)), [record]);
   function setField(name, value) {
@@ -354,14 +411,14 @@ function HistoryRow({ record, data, t, run, setData }) {
         <td key={name}><input name={name} type={["weightKg", "exerciseCalories", "sleepHours"].includes(name) ? "number" : name === "date" ? "date" : "text"} step={name === "sleepHours" || name === "weightKg" ? "0.1" : "1"} value={row[name]} onChange={(event) => setField(name, event.target.value)} /></td>
       ))}
       <td className="row-actions">
-        <button onClick={() => run(async () => applyServerState(await api.saveRecord({ ...serializeRow(row), userId: data.user.id }), setData), "saved")}><Save size={15} />{t("save")}</button>
-        <button onClick={() => run(async () => applyServerState(await api.deleteRecord(data.user.id, record.date), setData), "dataReady")}><Trash2 size={15} />{t("delete")}</button>
+        <button onClick={() => protectedRun(async () => applyServerState(await api.saveRecord({ ...serializeRow(row), userId: data.user.id }), setData), "saved")}><Save size={15} />{t("save")}</button>
+        <button onClick={() => protectedRun(async () => applyServerState(await api.deleteRecord(data.user.id, record.date), setData), "dataReady")}><Trash2 size={15} />{t("delete")}</button>
       </td>
     </tr>
   );
 }
 
-function ImportView({ data, t, draftRows, setDraftRows, run, setData }) {
+function ImportView({ data, t, draftRows, setDraftRows, protectedRun, setData }) {
   const [excelFile, setExcelFile] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   return (
@@ -375,12 +432,12 @@ function ImportView({ data, t, draftRows, setDraftRows, run, setData }) {
           <input type="file" accept=".xlsx" onChange={(event) => setExcelFile(event.target.files?.[0] || null)} />
         </label>
         <div className="button-row">
-          <button className="primary" onClick={() => run(async () => {
+          <button className="primary" onClick={() => protectedRun(async () => {
             if (!excelFile) throw new Error(t("uploadExcel"));
             const payload = await api.parseImportFile(excelFile.name, await fileToBase64(excelFile));
             setDraftRows(payload.rows || []);
           }, "dataReady")}><Database size={16} />{t("parse")}</button>
-          <button className="ghost" onClick={() => setDraftRows([...draftRows, { date: today(), weightKg: "", foodText: "", exerciseCalories: "", sleepHours: "" }])}>{t("addRow")}</button>
+          <button className="ghost" onClick={() => protectedRun(async () => setDraftRows([...draftRows, { date: today(), weightKg: "", foodText: "", exerciseCalories: "", sleepHours: "" }]))}>{t("addRow")}</button>
         </div>
       </section>
       <section className="panel">
@@ -391,7 +448,7 @@ function ImportView({ data, t, draftRows, setDraftRows, run, setData }) {
           <span>{imageFile ? imageFile.name : t("imageImport")}</span>
           <input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] || null)} />
         </label>
-        <button className="primary" onClick={() => run(async () => {
+        <button className="primary" onClick={() => protectedRun(async () => {
           if (!imageFile) throw new Error(t("imageImport"));
           const payload = await api.parseImage(imageFile.type || "image/png", await fileToBase64(imageFile));
           setDraftRows(payload.rows || []);
@@ -406,11 +463,11 @@ function ImportView({ data, t, draftRows, setDraftRows, run, setData }) {
           </table>
         </div>
         <div className="button-row">
-          <button className="primary" onClick={() => run(async () => {
+          <button className="primary" onClick={() => protectedRun(async () => {
             applyServerState(await api.confirmImport(data.user.id, draftRows.map(serializeRow)), setData);
             setDraftRows([]);
           }, "saved")}><Save size={16} />{t("commitImport")}</button>
-          <button className="ghost" onClick={() => setDraftRows([])}>{t("cancelImport")}</button>
+          <button className="ghost" onClick={() => protectedRun(async () => setDraftRows([]))}>{t("cancelImport")}</button>
         </div>
       </section>
     </section>
@@ -588,10 +645,14 @@ function applyDisplayRange(data, range) {
   };
 }
 
-function getDisplayRange(records, explicitEnd) {
+function getDisplayRange(records, explicitRange = {}) {
   const latestRecordDate = [...(records || [])].map((record) => record.date).filter(Boolean).sort().at(-1);
-  const end = explicitEnd || latestRecordDate || today();
-  return { start: shiftMonths(end, -3), end };
+  const end = explicitRange.end || latestRecordDate || today();
+  const earliestStart = shiftMonths(end, -6);
+  let start = explicitRange.start || earliestStart;
+  if (start < earliestStart) start = earliestStart;
+  if (start > end) start = end;
+  return { start, end };
 }
 
 function filterRecordsByRange(records, range) {
@@ -618,8 +679,9 @@ function filterChartSeriesByRange(series, range) {
 }
 
 function shiftMonths(value, delta) {
-  const date = new Date(`${value}T00:00:00`);
-  date.setMonth(date.getMonth() + delta);
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCMonth(date.getUTCMonth() + delta);
   return date.toISOString().slice(0, 10);
 }
 

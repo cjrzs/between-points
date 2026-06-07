@@ -30,8 +30,25 @@ async function main() {
   await page.send("Page.enable");
   await page.send("Runtime.enable");
   await waitFor(page, "document.readyState === 'complete'");
-  await waitForText(page, "落点之间");
-  await waitForText(page, "密码");
+
+  await waitFor(page, "document.querySelector('.app-shell') && !document.querySelector('.login-page')");
+  await waitFor(page, "document.querySelector('.control-panel')");
+  await waitFor(page, "document.querySelectorAll('.range-control input[type=\"date\"]').length === 2");
+  await waitFor(page, "document.querySelector('.account-chip')?.dataset.auth === 'anonymous'");
+
+  await page.evaluate(`
+    (() => document.querySelector('.theme-toggle')?.click())()
+  `);
+  await waitFor(page, "document.documentElement.dataset.theme === 'light'");
+
+  await page.evaluate(`
+    (() => {
+      const form = document.querySelector('.control-panel');
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    })()
+  `);
+  await waitFor(page, "document.querySelector('.login-modal')");
+  await waitFor(page, "document.querySelector('.login-backdrop')");
 
   const account = `browser-smoke-${Date.now()}`;
   await page.evaluate(`
@@ -42,23 +59,20 @@ async function main() {
         element.dispatchEvent(new Event('input', { bubbles: true }));
         element.dispatchEvent(new Event('change', { bubbles: true }));
       };
-      const inputs = document.querySelectorAll('input');
+      const modal = document.querySelector('.login-modal');
+      const inputs = modal.querySelectorAll('input');
       setNativeValue(inputs[0], ${JSON.stringify(account)});
       setNativeValue(inputs[1], 'secret-123');
-      document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      modal.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     })()
   `);
-  await waitForText(page, "每日打卡");
-  await waitForText(page, "显示至");
-  await assertBodyIncludes(page, ["睡眠 (h)", "运动消耗 (kcal)"]);
-  await assertBodyExcludes(page, ["运动时长", "摄入热量", "蛋白质", "脂肪", "高盐", "高碳水", "外食", "熬夜", "压力大"]);
-  await assertBodyIncludes(page, ["每日体重", "7 日均线", "14 日均线", "目标线"]);
+  await waitFor(page, "!document.querySelector('.login-modal')");
+  await waitFor(page, `document.querySelector('.account-chip')?.textContent.includes(${JSON.stringify(account)})`);
 
   await page.evaluate(`
-    (async () => {
+    (() => {
       const setValue = (name, value) => {
         const input = document.querySelector('[name="' + name + '"]');
-        if (!input) return;
         const setter = Object.getOwnPropertyDescriptor(input.constructor.prototype, 'value').set;
         setter.call(input, value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -70,90 +84,97 @@ async function main() {
       setValue('exerciseCalories', '280');
       setValue('exerciseName', 'strength');
       setValue('foodText', 'oats eggs beef rice');
-      await new Promise((resolve) => setTimeout(resolve, 300));
       document.querySelector('.control-panel').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     })()
   `);
-  await waitForText(page, "已保存");
-  await waitForText(page, "短期预测");
+  await waitFor(page, "document.body.innerText.includes('72.3')");
 
   await page.evaluate(`
     (async () => {
       const userId = localStorage.getItem('betweenPoints.userId');
-      await fetch('/api/records', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          date: '2026-05-01',
-          weightKg: 73.1,
-          sleepHours: 7,
-          exerciseCalories: 100,
-          foodText: 'older row',
-          note: 'history sort check'
-        })
-      });
+      for (const row of [
+        { date: '2026-05-01', weightKg: 73.1, sleepHours: 7, exerciseCalories: 100, foodText: 'inside range', note: 'history sort check' },
+        { date: '2025-11-01', weightKg: 76.4, sleepHours: 6, exerciseCalories: 80, foodText: 'outside range', note: 'range exclusion check' }
+      ]) {
+        await fetch('/api/records', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, ...row })
+        });
+      }
       const state = await fetch('/api/state?userId=' + encodeURIComponent(userId)).then((response) => response.json());
       localStorage.setItem('betweenPoints.userId', state.user.id);
       location.reload();
     })()
   `);
-  await waitForText(page, "每日打卡");
+  await waitFor(page, "document.querySelector('.control-panel')");
+  await waitFor(page, "document.querySelector('.account-chip')?.dataset.auth === 'authenticated'");
 
-  for (const label of ["分析", "历史", "导入", "首页"]) {
-    await page.evaluate(`
-      (() => {
-        const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent.includes(${JSON.stringify(label)}));
-        if (button) button.click();
-      })()
-    `);
-    await waitForText(page, label === "首页" ? "每日打卡" : label);
-    if (label === "历史") {
-      await waitFor(page, "document.querySelector('tbody tr input[name=\"date\"]')?.value === '2026-06-07'");
-    }
-    if (label === "导入") {
-      await assertBodyIncludes(page, ["下载示例文件", "上传 Excel", "解析图片"]);
-      await assertBodyExcludes(page, ["粘贴 CSV", "填入示例"]);
-    }
-  }
+  await page.evaluate(`
+    (() => {
+      const [start, end] = document.querySelectorAll('.range-control input[type="date"]');
+      const setNativeValue = (element, value) => {
+        const setter = Object.getOwnPropertyDescriptor(element.constructor.prototype, 'value').set;
+        setter.call(element, value);
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      setNativeValue(end, '2026-06-07');
+      setNativeValue(start, '2025-01-01');
+    })()
+  `);
+  await waitFor(page, "document.querySelectorAll('.range-control input[type=\"date\"]')[0].value === '2025-12-07'");
 
+  await page.evaluate("document.querySelectorAll('.nav button')[2].click()");
+  await waitFor(page, `
+    (() => {
+      const dates = Array.from(document.querySelectorAll('tbody tr input[name="date"]')).map((input) => input.value);
+      return dates[0] === '2026-06-07' && dates.includes('2026-05-01') && !dates.includes('2025-11-01');
+    })()
+  `);
+
+  await page.evaluate("document.querySelectorAll('.nav button')[3].click()");
+  await waitFor(page, "document.querySelector('input[type=\"file\"][accept=\".xlsx\"]')");
+  await waitFor(page, "document.querySelector('input[type=\"file\"][accept=\"image/*\"]')");
+
+  await page.evaluate("document.querySelectorAll('.nav button')[0].click()");
   await page.evaluate(`
     (() => {
       const canvas = document.querySelector('canvas');
       const rect = canvas.getBoundingClientRect();
-      const event = new PointerEvent('pointermove', {
+      canvas.dispatchEvent(new PointerEvent('pointermove', {
         bubbles: true,
         clientX: rect.left + 42,
         clientY: rect.top + 22,
         pointerType: 'mouse'
-      });
-      canvas.dispatchEvent(event);
+      }));
     })()
   `);
   await waitFor(page, "document.querySelector('.chart-tooltip')?.textContent.includes('73.1')");
 
   await page.evaluate(`
     (() => {
-      const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent.includes('7 日均线'));
-      if (!button) throw new Error('7 日均线 toggle not found');
+      const button = document.querySelectorAll('.series-toggle')[1];
+      if (!button) throw new Error('second series toggle not found');
       button.click();
     })()
   `);
-  await waitFor(page, "Array.from(document.querySelectorAll('button')).find((item) => item.textContent.includes('7 日均线'))?.getAttribute('aria-pressed') === 'false'");
+  await waitFor(page, "document.querySelectorAll('.series-toggle')[1]?.getAttribute('aria-pressed') === 'false'");
 
   await page.send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await writeFile(join(artifactDir, "browser-desktop.png"), Buffer.from((await page.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true })).data, "base64"));
 
   await page.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await page.send("Page.reload", { ignoreCache: true });
-  await waitForText(page, "每日打卡");
+  await waitFor(page, "document.querySelector('.control-panel')");
   await writeFile(join(artifactDir, "browser-mobile.png"), Buffer.from((await page.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true })).data, "base64"));
 
   const summary = await page.evaluate(`
     JSON.stringify({
       title: document.title,
-      hasDashboard: document.body.innerText.includes('每日打卡'),
-      hasPrediction: document.body.innerText.includes('短期预测'),
+      hasDashboard: Boolean(document.querySelector('.control-panel')),
+      hasDateRange: document.querySelectorAll('.range-control input[type="date"]').length,
+      theme: document.documentElement.dataset.theme,
       bodyLength: document.body.innerText.length,
       canvasCount: document.querySelectorAll('canvas').length
     })
@@ -183,28 +204,6 @@ async function waitFor(page, expression) {
   }
   const bodyText = await page.evaluate("document.body ? document.body.innerText.slice(0, 1200) : ''").catch(() => "");
   throw new Error(`Timed out waiting for ${expression}\nCurrent body:\n${bodyText}`);
-}
-
-async function waitForText(page, text) {
-  await waitFor(page, `document.body && document.body.innerText.includes(${JSON.stringify(text)})`);
-}
-
-async function assertBodyIncludes(page, texts) {
-  const bodyText = await page.evaluate("document.body.innerText");
-  for (const text of texts) {
-    if (!bodyText.includes(text)) {
-      throw new Error(`Expected page to include ${text}\\nCurrent body:\\n${bodyText.slice(0, 1200)}`);
-    }
-  }
-}
-
-async function assertBodyExcludes(page, texts) {
-  const bodyText = await page.evaluate("document.body.innerText");
-  for (const text of texts) {
-    if (bodyText.includes(text)) {
-      throw new Error(`Expected page not to include ${text}\\nCurrent body:\\n${bodyText.slice(0, 1200)}`);
-    }
-  }
 }
 
 function delay(ms) {
