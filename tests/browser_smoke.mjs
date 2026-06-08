@@ -94,6 +94,8 @@ async function main() {
     })()
   `);
   await waitFor(page, "document.body.innerText.includes('72.3')");
+  await waitFor(page, "document.querySelector('.toast')");
+  await waitFor(page, "!document.querySelector('.toast')");
 
   await page.evaluate(`
     (async () => {
@@ -169,6 +171,24 @@ async function main() {
 
   await page.send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await writeFile(join(artifactDir, "browser-desktop.png"), Buffer.from((await page.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true })).data, "base64"));
+
+  await page.evaluate("document.querySelector('.theme-toggle').click()");
+  await waitFor(page, "document.documentElement.dataset.theme === 'dark'");
+  await waitFor(page, `
+    (() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) return false;
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let visiblePixels = 0;
+      for (let index = 0; index < data.length; index += 4) {
+        const alpha = data[index + 3];
+        const brightness = data[index] + data[index + 1] + data[index + 2];
+        if (alpha > 24 && brightness > 220) visiblePixels += 1;
+      }
+      return visiblePixels > 80;
+    })()
+  `);
+  await writeFile(join(artifactDir, "browser-desktop-dark.png"), Buffer.from((await page.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true })).data, "base64"));
 
   await page.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await page.send("Page.reload", { ignoreCache: true });

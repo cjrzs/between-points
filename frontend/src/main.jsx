@@ -49,6 +49,31 @@ const initialData = {
   analysis: {}
 };
 
+const CHART_THEMES = {
+  dark: {
+    grid: "rgba(238, 247, 244, 0.16)",
+    axis: "#dce8e4",
+    empty: "#dce8e4",
+    series: {
+      cyan: "#39d5ff",
+      green: "#68f58b",
+      amber: "#ffbd4a",
+      target: "#ff5c93",
+    },
+  },
+  light: {
+    grid: "rgba(21, 35, 38, 0.16)",
+    axis: "#405052",
+    empty: "#405052",
+    series: {
+      cyan: "#087ea4",
+      green: "#168b55",
+      amber: "#b56e00",
+      target: "#b51655",
+    },
+  },
+};
+
 function anonymousData(language) {
   return {
     ...initialData,
@@ -81,6 +106,12 @@ function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("betweenPoints.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(""), 1800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     const userId = localStorage.getItem("betweenPoints.userId");
@@ -184,8 +215,8 @@ function App() {
         </header>
         {toast && <p className="toast">{toast}</p>}
         {error && <p className="error">{error}</p>}
-        {route === "dashboard" && <Dashboard data={displayData} t={t} protectedRun={protectedRun} setData={setData} displayRange={displayRange} />}
-        {route === "analysis" && <Analysis data={displayData} t={t} />}
+        {route === "dashboard" && <Dashboard data={displayData} t={t} theme={theme} protectedRun={protectedRun} setData={setData} displayRange={displayRange} />}
+        {route === "analysis" && <Analysis data={displayData} t={t} theme={theme} />}
         {route === "history" && <HistoryView data={displayData} t={t} filter={filter} setFilter={setFilter} protectedRun={protectedRun} setData={setData} />}
         {route === "import" && <ImportView data={displayData} t={t} draftRows={draftRows} setDraftRows={setDraftRows} protectedRun={protectedRun} setData={setData} />}
         {loginOpen && <LoginView t={t} error={error} onCancel={() => setLoginOpen(false)} onLogin={(account, password) => run(async () => {
@@ -243,7 +274,7 @@ function TargetControl({ t, user, onSave }) {
   );
 }
 
-function Dashboard({ data, t, protectedRun, setData, displayRange }) {
+function Dashboard({ data, t, theme, protectedRun, setData, displayRange }) {
   const latest = data.records.at(-1) || {};
   const [weightDraft, setWeightDraft] = useState(fmt(latest.weightKg));
   const [visibleWeightSeries, setVisibleWeightSeries] = useState({
@@ -253,12 +284,13 @@ function Dashboard({ data, t, protectedRun, setData, displayRange }) {
     target: true,
   });
   useEffect(() => setWeightDraft(fmt(latest.weightKg)), [latest.weightKg]);
+  const chartPalette = chartTheme(theme);
   const changes = data.goalProgress?.changes || {};
   const weightSeriesOptions = [
-    { key: "weight", label: t("weightLine"), values: data.chartSeries.weights, color: "#39d5ff" },
-    { key: "ma7", label: t("ma7"), values: data.chartSeries.ma7, color: "#68f58b" },
-    { key: "ma14", label: t("ma14"), values: data.chartSeries.ma14, color: "#ffbd4a" },
-    { key: "target", label: t("targetLine"), values: (data.chartSeries.weights || []).map(() => data.user.targetWeightKg), color: "#ff5c93" },
+    { key: "weight", label: t("weightLine"), values: data.chartSeries.weights, tone: "cyan" },
+    { key: "ma7", label: t("ma7"), values: data.chartSeries.ma7, tone: "green" },
+    { key: "ma14", label: t("ma14"), values: data.chartSeries.ma14, tone: "amber" },
+    { key: "target", label: t("targetLine"), values: (data.chartSeries.weights || []).map(() => data.user.targetWeightKg), tone: "target" },
   ];
   const visibleWeightDatasets = weightSeriesOptions.filter((item) => visibleWeightSeries[item.key]);
   return (
@@ -299,17 +331,17 @@ function Dashboard({ data, t, protectedRun, setData, displayRange }) {
               aria-pressed={visibleWeightSeries[item.key] ? "true" : "false"}
               onClick={() => setVisibleWeightSeries((current) => ({ ...current, [item.key]: !current[item.key] }))}
             >
-              <span style={{ background: item.color }} />
+              <span style={{ background: chartPalette.series[item.tone] }} />
               {item.label}
             </button>
           ))}
         </div>
-        <LineChart t={t} id="weightChart" labels={data.chartSeries.dates} datasets={visibleWeightDatasets} height={260} />
+        <LineChart t={t} theme={theme} id="weightChart" labels={data.chartSeries.dates} datasets={visibleWeightDatasets} height={260} />
       </section>
       <GoalPanel t={t} goal={data.goalProgress} />
       <PredictionPanel t={t} predictions={data.predictions} />
-      <section className="panel"><div className="panel-title"><h2>{t("exerciseChart")}</h2><span>{t("kcal")}</span></div><LineChart t={t} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.exerciseCalories, color: "#68f58b" }]} height={170} /></section>
-      <section className="panel"><div className="panel-title"><h2>{t("sleepChart")}</h2><span>{t("hours")}</span></div><LineChart t={t} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, color: "#ffbd4a" }]} height={170} /></section>
+      <section className="panel"><div className="panel-title"><h2>{t("exerciseChart")}</h2><span>{t("kcal")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.exerciseCalories, tone: "green" }]} height={170} /></section>
+      <section className="panel"><div className="panel-title"><h2>{t("sleepChart")}</h2><span>{t("hours")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, tone: "amber" }]} height={170} /></section>
     </section>
   );
 }
@@ -351,7 +383,7 @@ function PredictionPanel({ t, predictions = [] }) {
   );
 }
 
-function Analysis({ data, t }) {
+function Analysis({ data, t, theme }) {
   const analysis = data.analysis || {};
   return (
     <section className="analysis-grid">
@@ -370,7 +402,7 @@ function Analysis({ data, t }) {
           )) : <p className="muted">{t("enoughDataHint")}</p>}
         </div>
       </section>
-      <section className="panel wide"><div className="panel-title"><h2>{t("sleepRelation")}</h2><span>{t("hours")}</span></div><LineChart t={t} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, color: "#ffbd4a" }, { values: data.chartSeries.weights, color: "#39d5ff" }]} height={240} /></section>
+      <section className="panel wide"><div className="panel-title"><h2>{t("sleepRelation")}</h2><span>{t("hours")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, tone: "amber" }, { values: data.chartSeries.weights, tone: "cyan" }]} height={240} /></section>
       <section className="panel wide"><div className="panel-title"><h2>{t("predictionAccuracy")}</h2></div><p className="muted">{data.predictions?.[0]?.suggestion || t("emptyPrediction")}</p></section>
     </section>
   );
@@ -490,14 +522,14 @@ function Metric({ t, label, value }) {
   return <div><span>{t(label)}</span><strong>{value}</strong></div>;
 }
 
-function LineChart({ t, labels = [], datasets = [], height = 170 }) {
+function LineChart({ t, theme = "dark", labels = [], datasets = [], height = 170 }) {
   const canvasRef = useRef(null);
   const pointsRef = useRef([]);
   const [tooltip, setTooltip] = useState(null);
 
   useEffect(() => {
-    pointsRef.current = drawLineChart(canvasRef.current, t, labels, datasets, height);
-  }, [t, labels, datasets, height]);
+    pointsRef.current = drawLineChart(canvasRef.current, t, labels, datasets, height, theme);
+  }, [t, theme, labels, datasets, height]);
 
   function updateTooltip(event) {
     const canvas = canvasRef.current;
@@ -535,7 +567,7 @@ function LineChart({ t, labels = [], datasets = [], height = 170 }) {
   );
 }
 
-function drawLineChart(canvas, t, labels, datasets, height) {
+function drawLineChart(canvas, t, labels, datasets, height, theme) {
   if (!canvas) return [];
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
@@ -545,8 +577,10 @@ function drawLineChart(canvas, t, labels, datasets, height) {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   const width = canvas.width / ratio;
   const pad = { left: 42, right: 16, top: 22, bottom: 34 };
+  const palette = chartTheme(theme);
+  const resolveTone = (set) => set.color || palette.series[set.tone] || palette.axis;
   ctx.clearRect(0, 0, width, height);
-  ctx.strokeStyle = "rgba(255,255,255,.10)";
+  ctx.strokeStyle = palette.grid;
   for (let i = 0; i < 4; i += 1) {
     const y = pad.top + ((height - pad.top - pad.bottom) / 3) * i;
     ctx.beginPath();
@@ -556,7 +590,7 @@ function drawLineChart(canvas, t, labels, datasets, height) {
   }
   const allValues = datasets.flatMap((set) => (set.values || []).filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number));
   if (!allValues.length) {
-    ctx.fillStyle = "rgba(255,255,255,.52)";
+    ctx.fillStyle = palette.empty;
     ctx.fillText(t("noRows"), pad.left, height / 2);
     return [];
   }
@@ -567,8 +601,9 @@ function drawLineChart(canvas, t, labels, datasets, height) {
   const yFor = (value) => height - pad.bottom - ((Number(value) - min) / span) * (height - pad.top - pad.bottom);
   const points = [];
   datasets.forEach((set) => {
-    ctx.strokeStyle = set.color;
-    ctx.fillStyle = set.color;
+    const color = resolveTone(set);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
     let started = false;
@@ -593,13 +628,13 @@ function drawLineChart(canvas, t, labels, datasets, height) {
         x,
         y,
         value: Number(value).toFixed(1),
-        color: set.color,
+        color,
         label: set.label || "",
         date: labels[index] || "",
       });
     });
   });
-  ctx.fillStyle = "rgba(255,255,255,.68)";
+  ctx.fillStyle = palette.axis;
   ctx.font = "12px system-ui";
   ctx.fillText(String(max.toFixed(1)), 4, pad.top + 4);
   ctx.fillText(String(min.toFixed(1)), 4, height - pad.bottom);
@@ -608,6 +643,10 @@ function drawLineChart(canvas, t, labels, datasets, height) {
     ctx.fillText(labels.at(-1).slice(5), width - 70, height - 10);
   }
   return points;
+}
+
+function chartTheme(theme) {
+  return theme === "light" ? CHART_THEMES.light : CHART_THEMES.dark;
 }
 
 function applyServerState(payload, setData) {
