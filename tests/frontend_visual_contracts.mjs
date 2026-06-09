@@ -65,8 +65,19 @@ assert(
   styles.includes('input[type="date"]::-webkit-calendar-picker-indicator') &&
     styles.includes(':root[data-theme="light"] input[type="date"]') &&
     styles.includes("data:image/svg+xml") &&
-    styles.includes("opacity: 0"),
-  "date inputs should show a theme-aware calendar icon while preserving the native picker hit area"
+    styles.includes("opacity: 0") &&
+    /input\[type="date"\]\s*\{[\s\S]*?position:\s*relative;/.test(styles) &&
+    /input\[type="date"\]::-webkit-calendar-picker-indicator\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*0;[\s\S]*?width:\s*44px;[\s\S]*?height:\s*100%;/.test(styles),
+  "date inputs should align the native picker hit area with the visible calendar icon"
+);
+
+assert(
+  main.includes("betweenPointsAvatar") &&
+    /className="[^"]*brand-lockup[^"]*"/.test(main) &&
+    main.includes('className="brand-logo"') &&
+    styles.includes(".brand-lockup") &&
+    styles.includes(".brand-logo"),
+  "web sidebar should include the shared Between Points logo beside the brand name"
 );
 
 const gridRule = styles.match(/\.dashboard-grid,\s*\.analysis-grid,\s*\.import-grid\s*\{[\s\S]*?gap:\s*(\d+)px;/);

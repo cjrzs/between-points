@@ -102,6 +102,7 @@ input, textarea, select {
 }
 
 input[type="date"] {
+  position: relative;
   padding-right: 36px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23eef7f4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4'/%3E%3Cpath d='M16 2v4'/%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E");
   background-position: right 11px center;
@@ -114,6 +115,13 @@ input[type="date"] {
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  height: 100%;
+  margin: 0;
   cursor: pointer;
   opacity: 0;
 }
@@ -184,6 +192,23 @@ label span {
 }
 
 .brand { display: grid; gap: 3px; margin-bottom: 30px; }
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.brand-lockup > div {
+  display: grid;
+  min-width: 0;
+}
+.brand-logo {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 0 20px rgba(57, 213, 255, 0.18);
+}
 .brand strong { font-size: 24px; }
 .brand span, .muted { color: var(--muted); }
 

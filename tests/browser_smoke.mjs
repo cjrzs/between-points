@@ -33,6 +33,7 @@ async function main() {
 
   await waitFor(page, "document.querySelector('.app-shell') && !document.querySelector('.login-page')");
   await waitFor(page, "document.querySelector('.control-panel')");
+  await waitFor(page, "document.querySelector('.brand-logo')?.getAttribute('src')?.includes('between-points-avatar')");
   await waitFor(page, "document.querySelectorAll('.range-control input[type=\"date\"]').length === 2");
   await waitFor(page, "document.querySelector('.account-chip')?.dataset.auth === 'anonymous'");
 
@@ -117,6 +118,16 @@ async function main() {
   `);
   await waitFor(page, "document.querySelector('.control-panel')");
   await waitFor(page, "!document.querySelector('.account-chip') && document.querySelector('.top-actions button[title]')");
+  await waitFor(page, `
+    (() => {
+      const [start, end] = document.querySelectorAll('.range-control input[type="date"]');
+      const now = new Date();
+      const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+      const shifted = new Date(today + 'T00:00:00.000Z');
+      shifted.setUTCMonth(shifted.getUTCMonth() - 6);
+      return end.value === today && start.value === shifted.toISOString().slice(0, 10);
+    })()
+  `);
 
   await page.evaluate(`
     (() => {

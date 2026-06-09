@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BarChart3, Database, Download, History, Languages, LogIn, LogOut, Moon, Save, Sun, Trash2, Upload, Gauge } from "lucide-react";
+import betweenPointsAvatar from "./assets/between-points-avatar.png";
+import { getDisplayRange, today } from "./dateRange.js";
 import { dictionaries } from "./i18n.js";
 import "./styles.css";
 
@@ -104,7 +106,7 @@ function App() {
   const language = data.user?.language || localStorage.getItem("betweenPoints.lang") || browserLanguage();
   const t = (key) => (dictionaries[language] || dictionaries.zh)[key] || key;
   const viewData = useMemo(() => data.user ? data : anonymousData(language), [data, language]);
-  const displayRange = useMemo(() => getDisplayRange(viewData.records, displayRangeDraft), [viewData.records, displayRangeDraft]);
+  const displayRange = useMemo(() => getDisplayRange(displayRangeDraft), [displayRangeDraft]);
   const displayData = useMemo(() => applyDisplayRange(viewData, displayRange), [viewData, displayRange]);
 
   useEffect(() => {
@@ -155,9 +157,12 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <strong>{t("appName")}</strong>
-          <span>{t("appSubtitle")}</span>
+        <div className="brand brand-lockup">
+          <img className="brand-logo" src={betweenPointsAvatar} alt="" aria-hidden="true" />
+          <div>
+            <strong>{t("appName")}</strong>
+            <span>{t("appSubtitle")}</span>
+          </div>
         </div>
         <nav className="nav">
           <NavButton active={route === "dashboard"} onClick={() => setRoute("dashboard")} icon={<Gauge size={17} />} label={t("dashboard")} />
@@ -697,16 +702,6 @@ function applyDisplayRange(data, range) {
   };
 }
 
-function getDisplayRange(records, explicitRange = {}) {
-  const latestRecordDate = [...(records || [])].map((record) => record.date).filter(Boolean).sort().at(-1);
-  const end = explicitRange.end || latestRecordDate || today();
-  const earliestStart = shiftMonths(end, -6);
-  let start = explicitRange.start || earliestStart;
-  if (start < earliestStart) start = earliestStart;
-  if (start > end) start = end;
-  return { start, end };
-}
-
 function filterRecordsByRange(records, range) {
   return [...records]
     .filter((record) => record.date && record.date >= range.start && record.date <= range.end)
@@ -728,13 +723,6 @@ function filterChartSeriesByRange(series, range) {
     sleepHours: pick(series.sleepHours || []),
     caloriesIn: pick(series.caloriesIn || []),
   };
-}
-
-function shiftMonths(value, delta) {
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCMonth(date.getUTCMonth() + delta);
-  return date.toISOString().slice(0, 10);
 }
 
 function formRecord(data, weightDraft) {
@@ -794,10 +782,6 @@ function fmt(value) {
 
 function valueUnit(t, value, unit) {
   return value === null || value === undefined ? "-" : `${value} ${t(unit)}`;
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function browserLanguage() {
