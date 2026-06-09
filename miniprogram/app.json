@@ -1,0 +1,38 @@
+{
+  "pages": [
+    "pages/dashboard/dashboard",
+    "pages/checkin/checkin",
+    "pages/history/history",
+    "pages/analysis/analysis"
+  ],
+  "window": {
+    "navigationBarTitleText": "Between Points",
+    "navigationBarBackgroundColor": "#f7faf8",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f7faf8"
+  },
+  "tabBar": {
+    "color": "#6b756f",
+    "selectedColor": "#166a54",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/dashboard/dashboard",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/checkin/checkin",
+        "text": "打卡"
+      },
+      {
+        "pagePath": "pages/history/history",
+        "text": "历史"
+      },
+      {
+        "pagePath": "pages/analysis/analysis",
+        "text": "分析"
+      }
+    ]
+  }
+}

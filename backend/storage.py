@@ -3,7 +3,18 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .core import clean_daily_record, create_user, hash_password, normalize_account, utc_now_iso, validate_daily_record, verify_password
+from .core import (
+    clean_daily_record,
+    create_session_token,
+    create_user,
+    hash_password,
+    hash_session_token,
+    normalize_account,
+    session_expires_at,
+    utc_now_iso,
+    validate_daily_record,
+    verify_password,
+)
 
 try:
     import psycopg
@@ -20,6 +31,7 @@ class PostgresRepository:
         self.database_url = database_url
         self.table_prefix = table_prefix
         self.users_table = f"{table_prefix}users"
+        self.sessions_table = f"{table_prefix}sessions"
         self.records_table = f"{table_prefix}daily_records"
         self._init_db()
 
@@ -67,12 +79,31 @@ class PostgresRepository:
                     """
                 )
                 cur.execute(f"alter table {self.users_table} add column if not exists password_hash text")
+                cur.execute(f"alter table {self.users_table} add column if not exists wechat_openid text")
+                cur.execute(
+                    f"""
+                    create unique index if not exists {self.users_table}_wechat_openid_idx
+                    on {self.users_table} (wechat_openid)
+                    where wechat_openid is not null
+                    """
+                )
+                cur.execute(
+                    f"""
+                    create table if not exists {self.sessions_table} (
+                        token_hash text primary key,
+                        user_id text not null references {self.users_table}(id) on delete cascade,
+                        created_at text not null,
+                        expires_at text not null
+                    )
+                    """
+                )
 
     def reset_for_tests(self) -> None:
         if not self.table_prefix:
             raise RuntimeError("reset_for_tests requires a table prefix")
         with self.connect() as conn:
             with conn.cursor() as cur:
+                cur.execute(f"drop table if exists {self.sessions_table} cascade")
                 cur.execute(f"drop table if exists {self.records_table} cascade")
                 cur.execute(f"drop table if exists {self.users_table} cascade")
         self._init_db()
@@ -104,6 +135,69 @@ class PostgresRepository:
                     (user["id"], user["account"], hash_password(password), user["displayName"], user["language"], user["targetWeightKg"], user["createdAt"]),
                 )
                 return user
+
+    def login_wechat(self, openid: str, display_name: str = "微信用户") -> dict[str, Any]:
+        normalized_openid = (openid or "").strip()
+        if not normalized_openid:
+            raise ValueError("openid is required")
+        account = f"wechat:{normalized_openid}"
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"select * from {self.users_table} where wechat_openid = %s", (normalized_openid,))
+                existing = cur.fetchone()
+                if existing:
+                    return self._user_from_row(existing)
+                cur.execute(f"select * from {self.users_table} where account = %s", (account,))
+                existing_account = cur.fetchone()
+                if existing_account:
+                    cur.execute(
+                        f"update {self.users_table} set wechat_openid = %s where id = %s",
+                        (normalized_openid, existing_account["id"]),
+                    )
+                    return self.get_user(existing_account["id"])
+                user = create_user(account)
+                user["displayName"] = (display_name or "").strip() or "微信用户"
+                cur.execute(
+                    f"""
+                    insert into {self.users_table} (
+                        id, account, password_hash, display_name, language, target_weight_kg, created_at, wechat_openid
+                    ) values (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (user["id"], user["account"], None, user["displayName"], user["language"], user["targetWeightKg"], user["createdAt"], normalized_openid),
+                )
+                return user
+
+    def create_session(self, user_id: str, now: str | None = None) -> dict[str, Any]:
+        if not self.get_user(user_id):
+            raise KeyError("user not found")
+        created = now or utc_now_iso()
+        expires = session_expires_at(created)
+        token = create_session_token()
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    insert into {self.sessions_table} (token_hash, user_id, created_at, expires_at)
+                    values (%s, %s, %s, %s)
+                    """,
+                    (hash_session_token(token), user_id, created, expires),
+                )
+        return {"token": token, "expiresAt": expires}
+
+    def user_id_for_session(self, token: str, now: str | None = None) -> str | None:
+        if not token:
+            return None
+        current = now or utc_now_iso()
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"select user_id, expires_at from {self.sessions_table} where token_hash = %s", (hash_session_token(token),))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                if row["expires_at"] <= current:
+                    cur.execute(f"delete from {self.sessions_table} where token_hash = %s", (hash_session_token(token),))
+                    return None
+                return row["user_id"]
 
     def get_user(self, user_id: str) -> dict[str, Any] | None:
         with self.connect() as conn:

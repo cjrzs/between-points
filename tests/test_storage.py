@@ -31,6 +31,17 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(self.repo.records_for_user(u1["id"])[0]["weightKg"], 72.4)
         self.assertEqual(self.repo.records_for_user(u2["id"])[0]["weightKg"], 61)
 
+    def test_wechat_login_and_session_token_reuse_user(self):
+        first = self.repo.login_wechat("openid-123", "CJR")
+        second = self.repo.login_wechat("openid-123", "Ignored")
+        session = self.repo.create_session(first["id"], now="2026-06-08T00:00:00Z")
+
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(first["account"], "wechat:openid-123")
+        self.assertEqual(session["expiresAt"], "2026-07-08T00:00:00Z")
+        self.assertEqual(self.repo.user_id_for_session(session["token"], now="2026-06-08T00:00:01Z"), first["id"])
+        self.assertIsNone(self.repo.user_id_for_session(session["token"], now="2026-08-08T00:00:01Z"))
+
 
 if __name__ == "__main__":
     unittest.main()

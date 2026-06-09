@@ -1,0 +1,38 @@
+<view class="page history-page">
+  <view wx:if="{{!authed}}" class="panel stack">
+    <view class="h2">还没有登录</view>
+    <view class="muted">登录后可以查看和管理历史记录。</view>
+    <button class="primary-button" bindtap="goLogin">去登录</button>
+  </view>
+
+  <view wx:else class="stack">
+    <view class="panel-title page-title">
+      <view>
+        <view class="eyebrow">History</view>
+        <view class="h1">历史记录</view>
+      </view>
+      <button class="secondary-button compact-button" bindtap="goCheckin">补记</button>
+    </view>
+
+    <view wx:if="{{!records.length}}" class="panel empty-panel">
+      <view class="h2">暂无记录</view>
+      <view class="muted">保存第一次打卡后，这里会按日期倒序展示。</view>
+    </view>
+
+    <view wx:for="{{records}}" wx:key="id" class="panel record-card">
+      <view class="panel-title">
+        <view>
+          <view class="record-date">{{item.date}}</view>
+          <view class="muted">{{item.foodText || "未填写饮食"}}</view>
+        </view>
+        <view class="record-weight">{{item.weightText}}</view>
+      </view>
+      <view class="record-meta">
+        <text>睡眠 {{item.sleepText}}</text>
+        <text>运动 {{item.exerciseText}}</text>
+      </view>
+      <view wx:if="{{item.note}}" class="note">{{item.note}}</view>
+      <button class="danger-button" data-date="{{item.date}}" bindtap="deleteRecord">删除</button>
+    </view>
+  </view>
+</view>

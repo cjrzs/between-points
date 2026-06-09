@@ -1,0 +1,54 @@
+<view class="page analysis-page">
+  <view wx:if="{{!authed}}" class="panel stack">
+    <view class="h2">登录后查看分析</view>
+    <view class="muted">分析结果由 Between Points 后端计算，小程序只负责轻展示。</view>
+    <button class="primary-button" bindtap="goLogin">去登录</button>
+  </view>
+
+  <view wx:else class="stack">
+    <view class="panel">
+      <view class="eyebrow">Analysis</view>
+      <view class="h1">趋势分析</view>
+      <view class="summary-grid">
+        <view>
+          <text class="muted">记录</text>
+          <text class="summary-value">{{recordCount}}天</text>
+        </view>
+        <view>
+          <text class="muted">平均热量</text>
+          <text class="summary-value">{{averageCalories}}</text>
+        </view>
+        <view>
+          <text class="muted">平均睡眠</text>
+          <text class="summary-value">{{averageSleep}}</text>
+        </view>
+      </view>
+      <button class="secondary-button" bindtap="goCheckin">继续打卡</button>
+    </view>
+
+    <view class="panel">
+      <view class="h2">未来两天预测</view>
+      <view wx:if="{{predictions.length}}">
+        <view wx:for="{{predictions}}" wx:key="targetDate" class="prediction-card">
+          <view class="prediction-top">
+            <text>{{item.targetDate}}</text>
+            <text>{{item.minWeightKg}} - {{item.maxWeightKg}} kg</text>
+          </view>
+          <view class="muted">{{item.suggestion}}</view>
+        </view>
+      </view>
+      <view wx:else class="muted">至少记录一次体重后，会开始显示预测范围。</view>
+    </view>
+
+    <view class="panel">
+      <view class="h2">标签影响</view>
+      <view wx:if="{{tagImpact.length}}">
+        <view wx:for="{{tagImpact}}" wx:key="tag" class="tag-impact">
+          <text>{{item.tag}}</text>
+          <text>{{item.averageDeltaKg}} kg / {{item.count}} 次</text>
+        </view>
+      </view>
+      <view wx:else class="muted">使用标签几天后，这里会显示标签和次日体重变化的关系。</view>
+    </view>
+  </view>
+</view>

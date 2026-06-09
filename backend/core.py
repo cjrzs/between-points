@@ -34,6 +34,25 @@ def utc_now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
+def session_expires_at(now: str | None = None, days: int = 30) -> str:
+    base = parse_iso_utc(now) if now else datetime.utcnow().replace(microsecond=0)
+    return (base + timedelta(days=days)).replace(microsecond=0).isoformat() + "Z"
+
+
+def parse_iso_utc(value: str) -> datetime:
+    return datetime.fromisoformat(value.rstrip("Z"))
+
+
+def create_session_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_session_token(token: str) -> str:
+    if not token:
+        raise ValueError("token is required")
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def normalize_account(account: str) -> str:
     normalized = (account or "").strip().lower()
     if not normalized:

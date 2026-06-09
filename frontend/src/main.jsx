@@ -6,9 +6,14 @@ import "./styles.css";
 
 const api = {
   async request(path, options = {}) {
+    const token = localStorage.getItem("betweenPoints.sessionToken");
     const response = await fetch(path, {
       ...options,
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        ...(options.headers || {})
+      }
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "apiError");
@@ -18,7 +23,7 @@ const api = {
     return this.request("/api/login", { method: "POST", body: JSON.stringify({ account, password }) });
   },
   state(userId) {
-    return this.request(`/api/state?userId=${encodeURIComponent(userId)}`);
+    return this.request(userId ? `/api/state?userId=${encodeURIComponent(userId)}` : "/api/state");
   },
   updateUser(body) {
     return this.request("/api/user", { method: "PATCH", body: JSON.stringify(body) });
@@ -115,10 +120,15 @@ function App() {
 
   useEffect(() => {
     const userId = localStorage.getItem("betweenPoints.userId");
-    if (!userId) return;
+    const sessionToken = localStorage.getItem("betweenPoints.sessionToken");
+    if (!userId && !sessionToken) return;
     api.state(userId)
       .then((payload) => applyServerState(payload, setData))
-      .catch(() => localStorage.removeItem("betweenPoints.userId"));
+      .catch(() => {
+        localStorage.removeItem("betweenPoints.userId");
+        localStorage.removeItem("betweenPoints.sessionToken");
+        localStorage.removeItem("betweenPoints.sessionExpiresAt");
+      });
   }, []);
 
   async function run(action, toastKey = "") {
@@ -202,6 +212,8 @@ function App() {
             {data.user ? (
               <button className="icon-button" title={t("logout")} onClick={() => {
                 localStorage.removeItem("betweenPoints.userId");
+                localStorage.removeItem("betweenPoints.sessionToken");
+                localStorage.removeItem("betweenPoints.sessionExpiresAt");
                 setData(initialData);
               }}>
                 <LogOut size={18} />
@@ -665,6 +677,10 @@ function applyServerState(payload, setData) {
   if (storedUser) {
     localStorage.setItem("betweenPoints.userId", storedUser.id);
     localStorage.setItem("betweenPoints.lang", storedUser.language);
+    if (payload.session?.token) {
+      localStorage.setItem("betweenPoints.sessionToken", payload.session.token);
+      localStorage.setItem("betweenPoints.sessionExpiresAt", payload.session.expiresAt || "");
+    }
   }
 }
 

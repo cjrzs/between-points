@@ -1,0 +1,71 @@
+<view class="page checkin-page">
+  <view wx:if="{{!authed}}" class="panel stack">
+    <view class="h2">先登录再打卡</view>
+    <view class="muted">小程序会使用微信登录，并把数据保存到 Between Points 后端。</view>
+    <button class="primary-button" bindtap="goLogin">去登录</button>
+  </view>
+
+  <view wx:else class="stack">
+    <view class="panel">
+      <view class="panel-title">
+        <view>
+          <view class="eyebrow">Daily Check-in</view>
+          <view class="h2">记录今天的关键点</view>
+        </view>
+      </view>
+
+      <view class="form-stack">
+        <view class="field">
+          <text>日期</text>
+          <picker class="date-picker" mode="date" value="{{form.date}}" bindchange="onDateChange">
+            <view class="picker-hit-area">
+              <text class="picker-value-text">{{form.date}}</text>
+              <text class="picker-icon">▾</text>
+            </view>
+          </picker>
+        </view>
+
+        <view class="field">
+          <text>体重 kg</text>
+          <input type="digit" value="{{form.weightKg}}" data-field="weightKg" bindinput="onInput" placeholder="例如 72.4" />
+        </view>
+
+        <view class="field">
+          <text>饮食</text>
+          <textarea value="{{form.foodText}}" data-field="foodText" bindinput="onInput" placeholder="今天吃了什么" />
+        </view>
+
+        <view class="two-cols">
+          <view class="field">
+            <text>运动 kcal</text>
+            <input type="number" value="{{form.exerciseCalories}}" data-field="exerciseCalories" bindinput="onInput" placeholder="0" />
+          </view>
+          <view class="field">
+            <text>睡眠 h</text>
+            <input type="digit" value="{{form.sleepHours}}" data-field="sleepHours" bindinput="onInput" placeholder="7" />
+          </view>
+        </view>
+
+        <view class="field">
+          <text>标签</text>
+          <view class="tag-grid">
+            <button
+              wx:for="{{tagOptions}}"
+              wx:key="key"
+              class="tag {{form.tags.indexOf(item.key) >= 0 ? 'active' : ''}}"
+              data-key="{{item.key}}"
+              bindtap="toggleTag"
+            >{{item.label}}</button>
+          </view>
+        </view>
+
+        <view class="field">
+          <text>备注</text>
+          <textarea value="{{form.note}}" data-field="note" bindinput="onInput" placeholder="可选" />
+        </view>
+      </view>
+    </view>
+
+    <button class="primary-button" loading="{{saving}}" bindtap="submit">保存打卡</button>
+  </view>
+</view>

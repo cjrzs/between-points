@@ -1,0 +1,77 @@
+<view class="page dashboard-page">
+  <view wx:if="{{!authed}}" class="stack">
+    <view class="panel hero-panel">
+      <view class="brand-lockup">
+        <image class="brand-icon" src="/assets/between-points-avatar.png" mode="aspectFill" />
+        <view>
+          <view class="brand-title">落点之间</view>
+          <view class="eyebrow">Between Points</view>
+        </view>
+      </view>
+      <view class="h1">把每天的体重变化记清楚</view>
+      <view class="muted hero-copy">用微信登录后，可以记录体重、饮食、运动和睡眠，并同步到现有后端。</view>
+      <button class="primary-button" loading="{{loading}}" bindtap="loginWithWechat">微信登录</button>
+    </view>
+    <view wx:if="{{error}}" class="error-text">{{error}}</view>
+  </view>
+
+  <view wx:else class="stack">
+    <view class="panel hero-panel">
+      <view class="brand-lockup">
+        <image class="brand-icon" src="/assets/between-points-avatar.png" mode="aspectFill" />
+        <view>
+          <view class="brand-title">落点之间</view>
+          <view class="eyebrow">Between Points</view>
+        </view>
+      </view>
+      <view class="panel-title">
+        <view>
+          <view class="eyebrow">{{user.account}}</view>
+          <view class="h1">{{currentWeight}}</view>
+        </view>
+        <button class="secondary-button compact-button" bindtap="logout">退出</button>
+      </view>
+      <view class="metric-grid">
+        <view>
+          <text class="muted">目标</text>
+          <text class="metric-value">{{targetWeight}}</text>
+        </view>
+        <view>
+          <text class="muted">距离</text>
+          <text class="metric-value">{{distance}}</text>
+        </view>
+        <view>
+          <text class="muted">记录</text>
+          <text class="metric-value">{{recordsCount}}天</text>
+        </view>
+      </view>
+      <button class="primary-button" bindtap="goCheckin">今日打卡</button>
+    </view>
+
+    <view class="panel">
+      <view class="panel-title">
+        <view class="h2">近 14 次体重</view>
+        <view class="muted">{{latest.date || ""}}</view>
+      </view>
+      <view wx:if="{{trendBars.length}}" class="bars">
+        <view wx:for="{{trendBars}}" wx:key="date" class="bar-item">
+          <view class="bar-value">{{item.weightKg}}</view>
+          <view class="bar" style="height: {{item.height}}rpx;"></view>
+          <view class="bar-date">{{item.date}}</view>
+        </view>
+      </view>
+      <view wx:else class="empty">还没有体重记录</view>
+    </view>
+
+    <view class="panel">
+      <view class="h2">预测</view>
+      <view wx:if="{{predictions.length}}">
+        <view wx:for="{{predictions}}" wx:key="targetDate" class="prediction-row">
+          <text>{{item.targetDate}}</text>
+          <text>{{item.minWeightKg}} - {{item.maxWeightKg}} kg</text>
+        </view>
+      </view>
+      <view wx:else class="muted">继续记录几天后会看到趋势预测。</view>
+    </view>
+  </view>
+</view>

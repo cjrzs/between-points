@@ -1,0 +1,68 @@
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.date-picker {
+  width: 100%;
+}
+
+.picker-hit-area {
+  min-height: 78rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  border: 1rpx solid #d7e1db;
+  border-radius: 12rpx;
+  background: #fbfdfb;
+  padding: 20rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+}
+
+.picker-value-text {
+  color: #15231d;
+  flex: 1;
+}
+
+.picker-icon {
+  width: 52rpx;
+  height: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999rpx;
+  background: #edf4f0;
+  color: #166a54;
+  font-size: 28rpx;
+}
+
+.two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18rpx;
+}
+
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.tag {
+  margin: 0;
+  min-width: 132rpx;
+  border-radius: 999rpx;
+  background: #edf4f0;
+  color: #476155;
+  font-size: 24rpx;
+  line-height: 1;
+  padding: 18rpx 22rpx;
+}
+
+.tag.active {
+  background: #166a54;
+  color: #ffffff;
+}
