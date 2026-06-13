@@ -154,3 +154,28 @@ assert(
   Number(importRule[1]) > Number(gridRule[1]),
   "import page should have more breathing room than the default page grid"
 );
+
+assert(
+  main.includes("function SleepVolatilityPanel") &&
+    main.includes("function summarizeSleepVolatility") &&
+    /<SleepVolatilityPanel[\s\S]*?records=\{data\.records\}[\s\S]*?weightUnit=\{weightUnit\}/.test(main) &&
+    !/sleepRelation[\s\S]{0,220}<LineChart[\s\S]{0,220}data\.chartSeries\.sleepHours[\s\S]{0,220}kgSeriesToDisplay\(data\.chartSeries\.weights/.test(main),
+  "analysis sleep relation should be a compact insight panel instead of a raw sleep and weight mixed-axis line chart"
+);
+
+assert(
+  styles.includes(".sleep-volatility-panel") &&
+    styles.includes(".sleep-insight") &&
+    styles.includes(".volatility-bars") &&
+    styles.includes(".volatility-bar") &&
+    styles.includes(".volatility-meter"),
+  "sleep volatility insight panel should have dedicated compact analysis styles"
+);
+
+assert(
+  i18n.includes("sleepShortDays") &&
+    i18n.includes("sleepNormalDays") &&
+    i18n.includes("nextDayChange") &&
+    i18n.includes("shortSleepInsight"),
+  "sleep volatility insight labels should be available in both languages"
+);

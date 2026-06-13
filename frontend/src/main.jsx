@@ -252,7 +252,7 @@ function App() {
         {toast && <p className="toast">{toast}</p>}
         {error && <p className="error">{error}</p>}
         {route === "dashboard" && <Dashboard data={displayData} t={t} language={language} theme={theme} weightUnit={weightUnit} protectedRun={protectedRun} setData={setData} displayRange={displayRange} />}
-        {route === "analysis" && <Analysis data={displayData} t={t} theme={theme} weightUnit={weightUnit} />}
+        {route === "analysis" && <Analysis data={displayData} t={t} weightUnit={weightUnit} />}
         {route === "history" && <HistoryView data={displayData} t={t} language={language} weightUnit={weightUnit} filter={filter} setFilter={setFilter} protectedRun={protectedRun} setData={setData} />}
         {route === "import" && <ImportView data={displayData} t={t} language={language} weightUnit={weightUnit} draftRows={draftRows} setDraftRows={setDraftRows} protectedRun={protectedRun} setData={setData} />}
         {loginOpen && <LoginView t={t} error={error} onCancel={() => setLoginOpen(false)} onLogin={(account, password) => run(async () => {
@@ -556,7 +556,7 @@ function PredictionPanel({ t, predictions = [], weightUnit }) {
   );
 }
 
-function Analysis({ data, t, theme, weightUnit }) {
+function Analysis({ data, t, weightUnit }) {
   const analysis = data.analysis || {};
   return (
     <section className="analysis-grid">
@@ -575,10 +575,93 @@ function Analysis({ data, t, theme, weightUnit }) {
           )) : <p className="muted">{t("enoughDataHint")}</p>}
         </div>
       </section>
-      <section className="panel wide"><div className="panel-title"><h2>{t("sleepRelation")}</h2><span>{t("hours")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, tone: "amber" }, { values: kgSeriesToDisplay(data.chartSeries.weights, weightUnit), tone: "cyan" }]} height={240} /></section>
+      <SleepVolatilityPanel records={data.records} t={t} weightUnit={weightUnit} />
       <section className="panel wide"><div className="panel-title"><h2>{t("predictionAccuracy")}</h2></div><p className="muted">{data.predictions?.[0]?.suggestion || t("emptyPrediction")}</p></section>
     </section>
   );
+}
+
+function SleepVolatilityPanel({ records = [], t, weightUnit }) {
+  const summary = useMemo(() => summarizeSleepVolatility(records), [records]);
+  const unit = displayWeightUnit(t, weightUnit);
+  const maxChange = Math.max(summary.short.averageDeltaKg || 0, summary.normal.averageDeltaKg || 0, 0.1);
+  const difference = Math.abs((summary.short.averageDeltaKg || 0) - (summary.normal.averageDeltaKg || 0));
+  const insightKey = summary.hasComparison
+    ? (summary.short.averageDeltaKg > summary.normal.averageDeltaKg ? "shortSleepInsight" : "normalSleepInsight")
+    : "sleepVolatilityHint";
+  return (
+    <section className="panel wide sleep-volatility-panel">
+      <div className="panel-title"><h2>{t("sleepRelation")}</h2><span>{t("nextDayChange")}</span></div>
+      <p className="sleep-insight">
+        {t(insightKey)}
+        {summary.hasComparison ? ` ${displayWeightValue(difference, weightUnit)} ${unit}` : ""}
+      </p>
+      <div className="sleep-stat-grid">
+        <SleepVolatilityMetric t={t} label="sleepShortDays" bucket={summary.short} weightUnit={weightUnit} />
+        <SleepVolatilityMetric t={t} label="sleepNormalDays" bucket={summary.normal} weightUnit={weightUnit} />
+      </div>
+      <div className="volatility-bars" aria-label={t("sleepRelation")}>
+        <VolatilityBar t={t} label="sleepShortDays" bucket={summary.short} maxChange={maxChange} weightUnit={weightUnit} tone="amber" />
+        <VolatilityBar t={t} label="sleepNormalDays" bucket={summary.normal} maxChange={maxChange} weightUnit={weightUnit} tone="cyan" />
+      </div>
+    </section>
+  );
+}
+
+function SleepVolatilityMetric({ t, label, bucket, weightUnit }) {
+  return (
+    <div>
+      <span>{t(label)}</span>
+      <strong>{bucket.count ? `${displayWeightValue(bucket.averageDeltaKg, weightUnit)} ${displayWeightUnit(t, weightUnit)}` : "-"}</strong>
+      <small>{bucket.count} {t("records")}</small>
+    </div>
+  );
+}
+
+function VolatilityBar({ t, label, bucket, maxChange, weightUnit, tone }) {
+  const width = bucket.count ? Math.max(8, (bucket.averageDeltaKg / maxChange) * 100) : 0;
+  return (
+    <div className="volatility-bar">
+      <span>{t(label)}</span>
+      <div className="volatility-meter"><i className={`tone-${tone}`} style={{ width: `${width}%` }} /></div>
+      <b>{bucket.count ? `${displayWeightValue(bucket.averageDeltaKg, weightUnit)} ${displayWeightUnit(t, weightUnit)}` : "-"}</b>
+    </div>
+  );
+}
+
+function summarizeSleepVolatility(records = []) {
+  const buckets = {
+    short: { count: 0, totalDeltaKg: 0, averageDeltaKg: null },
+    normal: { count: 0, totalDeltaKg: 0, averageDeltaKg: null },
+  };
+  const ordered = [...records].filter((record) => record.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index];
+    const next = ordered[index + 1];
+    const sleep = numberValue(current.sleepHours);
+    const currentWeight = numberValue(current.weightKg);
+    const nextWeight = numberValue(next.weightKg);
+    if (sleep === null || currentWeight === null || nextWeight === null || !isNextCalendarDay(current.date, next.date)) continue;
+    const bucket = sleep < 6 ? buckets.short : buckets.normal;
+    bucket.count += 1;
+    bucket.totalDeltaKg += Math.abs(nextWeight - currentWeight);
+  }
+  Object.values(buckets).forEach((bucket) => {
+    bucket.averageDeltaKg = bucket.count ? bucket.totalDeltaKg / bucket.count : null;
+  });
+  return {
+    ...buckets,
+    hasComparison: buckets.short.count > 0 && buckets.normal.count > 0,
+  };
+}
+
+function isNextCalendarDay(currentDate, nextDate) {
+  if (!isDateValue(currentDate) || !isDateValue(nextDate)) return false;
+  const [currentYear, currentMonth, currentDay] = String(currentDate).split("-").map(Number);
+  const [nextYear, nextMonth, nextDay] = String(nextDate).split("-").map(Number);
+  const currentUtc = Date.UTC(currentYear, currentMonth - 1, currentDay);
+  const nextUtc = Date.UTC(nextYear, nextMonth - 1, nextDay);
+  return nextUtc - currentUtc === 24 * 60 * 60 * 1000;
 }
 
 function HistoryView({ data, t, language, weightUnit, filter, setFilter, protectedRun, setData }) {
