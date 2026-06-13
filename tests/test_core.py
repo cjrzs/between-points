@@ -104,6 +104,11 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(rows[0]["weightKg"], 72.4)
         self.assertEqual(rows[0]["tags"], ["highSalt", "diningOut"])
 
+    def test_parses_generic_csv_weight_using_selected_jin_unit(self):
+        rows = parse_csv_records("date,weight,foodText,sleepHours\n2026-06-07,144.8,hot pot,6.5", weight_unit="jin")
+
+        self.assertEqual(rows[0]["weightKg"], 72.4)
+
     def test_parses_excel_records_into_import_rows(self):
         try:
             from openpyxl import Workbook
@@ -123,6 +128,42 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(rows[0]["date"], "2026-06-07")
         self.assertEqual(rows[0]["weightKg"], 72.4)
         self.assertEqual(rows[0]["note"], "excel row")
+
+    def test_parses_excel_jin_weight_header_into_kg(self):
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            self.skipTest("openpyxl is not installed")
+        from io import BytesIO
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["date", "weightJin", "foodText", "sleepHours"])
+        sheet.append(["2026-06-07", 144.8, "hot pot", 6.5])
+        buffer = BytesIO()
+        workbook.save(buffer)
+
+        rows = parse_excel_records(buffer.getvalue())
+
+        self.assertEqual(rows[0]["weightKg"], 72.4)
+
+    def test_parses_generic_excel_weight_using_selected_jin_unit(self):
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            self.skipTest("openpyxl is not installed")
+        from io import BytesIO
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["date", "体重", "foodText", "sleepHours"])
+        sheet.append(["2026-06-07", 144.8, "hot pot", 6.5])
+        buffer = BytesIO()
+        workbook.save(buffer)
+
+        rows = parse_excel_records(buffer.getvalue(), weight_unit="jin")
+
+        self.assertEqual(rows[0]["weightKg"], 72.4)
 
     def test_applies_confirmed_import_rows(self):
         result = apply_import_rows([], "u1", [

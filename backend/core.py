@@ -335,14 +335,46 @@ def prediction_labels(language: str) -> dict[str, Any]:
     }
 
 
-def parse_csv_records(text: str) -> list[dict[str, Any]]:
+KG_WEIGHT_HEADERS = {
+    "weightkg",
+    "kg",
+    "kilogram",
+    "kilograms",
+    "weight(kg)",
+    "weight（kg）",
+    "weight公斤",
+    "体重kg",
+    "体重(kg)",
+    "体重（kg）",
+    "体重公斤",
+    "体重(公斤)",
+    "体重（公斤）",
+    "公斤",
+    "千克",
+}
+JIN_WEIGHT_HEADERS = {
+    "weightjin",
+    "jin",
+    "weight(斤)",
+    "weight（斤）",
+    "weight斤",
+    "体重jin",
+    "体重斤",
+    "体重(斤)",
+    "体重（斤）",
+    "斤",
+}
+GENERIC_WEIGHT_HEADERS = {"weight", "体重"}
+
+
+def parse_csv_records(text: str, weight_unit: str = "kg") -> list[dict[str, Any]]:
     stream = io.StringIO(text.strip())
     rows: list[dict[str, Any]] = []
     for raw in csv.DictReader(stream):
         row = {key.strip(): (value or "").strip() for key, value in raw.items() if key}
         rows.append(clean_daily_record({
             "date": row.get("date") or row.get("日期"),
-            "weightKg": row.get("weightKg") or row.get("weight") or row.get("体重"),
+            "weightKg": import_weight_kg(row, weight_unit),
             "foodText": row.get("foodText") or row.get("food") or row.get("饮食") or "",
             "caloriesIn": row.get("caloriesIn") or row.get("calories") or row.get("热量"),
             "proteinG": row.get("proteinG") or row.get("protein") or row.get("蛋白质"),
@@ -356,7 +388,7 @@ def parse_csv_records(text: str) -> list[dict[str, Any]]:
     return rows
 
 
-def parse_excel_records(content: bytes) -> list[dict[str, Any]]:
+def parse_excel_records(content: bytes, weight_unit: str = "kg") -> list[dict[str, Any]]:
     try:
         from openpyxl import load_workbook
     except ImportError as exc:
@@ -375,7 +407,7 @@ def parse_excel_records(content: bytes) -> list[dict[str, Any]]:
             continue
         parsed.append(clean_daily_record({
             "date": raw.get("date") or raw.get("日期"),
-            "weightKg": raw.get("weightKg") or raw.get("weight") or raw.get("体重"),
+            "weightKg": import_weight_kg(raw, weight_unit),
             "foodText": raw.get("foodText") or raw.get("food") or raw.get("饮食") or "",
             "caloriesIn": raw.get("caloriesIn") or raw.get("calories") or raw.get("热量"),
             "proteinG": raw.get("proteinG") or raw.get("protein") or raw.get("蛋白质"),
@@ -387,6 +419,37 @@ def parse_excel_records(content: bytes) -> list[dict[str, Any]]:
             "note": raw.get("note") or raw.get("备注") or "",
         }))
     return parsed
+
+
+def import_weight_kg(row: dict[str, Any], fallback_unit: str = "kg") -> float | None:
+    for key, value in row.items():
+        if normalize_header(key) in KG_WEIGHT_HEADERS:
+            return to_number(value)
+    for key, value in row.items():
+        if normalize_header(key) in JIN_WEIGHT_HEADERS:
+            return imported_weight_to_kg(value, "jin")
+    for key, value in row.items():
+        if normalize_header(key) in GENERIC_WEIGHT_HEADERS:
+            return imported_weight_to_kg(value, fallback_unit)
+    return None
+
+
+def imported_weight_to_kg(value: Any, unit: str = "kg") -> float | None:
+    number = to_number(value)
+    if number is None:
+        return None
+    if normalize_weight_unit(unit) == "jin":
+        return round(number / 2, 3)
+    return number
+
+
+def normalize_weight_unit(unit: Any) -> str:
+    text = str(unit or "").strip().lower()
+    return "jin" if text in {"jin", "斤"} else "kg"
+
+
+def normalize_header(value: Any) -> str:
+    return cell_text(value).replace(" ", "").replace("_", "").lower()
 
 
 def generate_sample_excel() -> bytes:

@@ -59,7 +59,7 @@ export const dictionaries = {
     save: "保存",
     delete: "删除",
     excelImport: "表格导入",
-    excelHint: "上传 Excel 文件（.xlsx），表头支持 date, weightKg, foodText, exerciseCalories, sleepHours, note。",
+    excelHint: "上传 Excel 文件（.xlsx），表头支持 date, weightKg（公斤）, weightJin（斤）, weight/体重, foodText, exerciseCalories, sleepHours, note；weight/体重 会按当前体重单位解释。",
     parse: "解析",
     addRow: "新增手动行",
     commitImport: "批量确认",
@@ -70,7 +70,9 @@ export const dictionaries = {
     uploadExcel: "上传 Excel",
     downloadSample: "下载示例文件",
     parseImage: "解析图片",
-    kg: "kg",
+    kg: "公斤",
+    jin: "斤",
+    weightUnit: "体重单位",
     kcal: "kcal",
     hours: "h",
     records: "记录",
@@ -89,7 +91,9 @@ export const dictionaries = {
     ma14: "14 日均线",
     targetLine: "目标线",
     useSample: "填入示例",
-    excelSelected: "已选择文件"
+    excelSelected: "已选择文件",
+    previousMonth: "上个月",
+    nextMonth: "下个月"
   },
   en: {
     appName: "Between Points",
@@ -151,7 +155,7 @@ export const dictionaries = {
     save: "Save",
     delete: "Delete",
     excelImport: "Spreadsheet import",
-    excelHint: "Upload an Excel file (.xlsx). Headers: date, weightKg, foodText, exerciseCalories, sleepHours, note.",
+    excelHint: "Upload an Excel file (.xlsx). Headers: date, weightKg (kilograms), weightJin (catties), weight/body weight, foodText, exerciseCalories, sleepHours, note. Generic weight follows the selected weight unit.",
     parse: "Parse",
     addRow: "Add manual row",
     commitImport: "Confirm batch",
@@ -162,7 +166,9 @@ export const dictionaries = {
     uploadExcel: "Upload Excel",
     downloadSample: "Download sample file",
     parseImage: "Parse image",
-    kg: "kg",
+    kg: "kilograms",
+    jin: "catties",
+    weightUnit: "Weight unit",
     kcal: "kcal",
     hours: "h",
     records: "records",
@@ -181,6 +187,8 @@ export const dictionaries = {
     ma14: "14-day average",
     targetLine: "Target",
     useSample: "Use sample",
-    excelSelected: "Selected file"
+    excelSelected: "Selected file",
+    previousMonth: "Previous month",
+    nextMonth: "Next month"
   }
 };

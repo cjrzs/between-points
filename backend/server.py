@@ -162,6 +162,7 @@ class BetweenPointsHandler(BaseHTTPRequestHandler):
 
     def handle_parse_import(self) -> None:
         body = self.read_json()
+        weight_unit = body.get("weightUnit", "kg")
         if body.get("fileData"):
             try:
                 content = base64.b64decode(body["fileData"])
@@ -170,14 +171,14 @@ class BetweenPointsHandler(BaseHTTPRequestHandler):
                 return
             file_name = (body.get("fileName") or "").lower()
             if file_name.endswith(".xlsx"):
-                rows = parse_excel_records(content)
+                rows = parse_excel_records(content, weight_unit=weight_unit)
             elif file_name.endswith(".csv"):
-                rows = parse_csv_records(content.decode("utf-8-sig"))
+                rows = parse_csv_records(content.decode("utf-8-sig"), weight_unit=weight_unit)
             else:
                 self.send_error_json(HTTPStatus.BAD_REQUEST, "only .xlsx and .csv files are supported")
                 return
         else:
-            rows = parse_csv_records(body.get("csv", ""))
+            rows = parse_csv_records(body.get("csv", ""), weight_unit=weight_unit)
         self.send_json({"rows": rows})
 
     def handle_sample_excel(self) -> None:

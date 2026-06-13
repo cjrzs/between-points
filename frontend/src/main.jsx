@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BarChart3, Database, Download, History, Languages, LogIn, LogOut, Moon, Save, Sun, Trash2, Upload, Gauge } from "lucide-react";
+import { BarChart3, Calendar, ChevronLeft, ChevronRight, Database, Download, History, Languages, LogIn, LogOut, Moon, Save, Sun, Trash2, Upload, Gauge } from "lucide-react";
 import betweenPointsAvatar from "./assets/between-points-avatar.png";
 import { getDisplayRange, today } from "./dateRange.js";
 import { dictionaries } from "./i18n.js";
@@ -36,8 +36,8 @@ const api = {
   deleteRecord(userId, date) {
     return this.request(`/api/records?userId=${encodeURIComponent(userId)}&date=${encodeURIComponent(date)}`, { method: "DELETE" });
   },
-  parseImportFile(fileName, fileData) {
-    return this.request("/api/import/parse", { method: "POST", body: JSON.stringify({ fileName, fileData }) });
+  parseImportFile(fileName, fileData, weightUnit = "kg") {
+    return this.request("/api/import/parse", { method: "POST", body: JSON.stringify({ fileName, fileData, weightUnit }) });
   },
   parseImage(mimeType, imageData) {
     return this.request("/api/import/image", { method: "POST", body: JSON.stringify({ mimeType, imageData }) });
@@ -81,6 +81,10 @@ const CHART_THEMES = {
   },
 };
 
+function savedWeightUnit() {
+  return normalizeWeightUnit(localStorage.getItem("betweenPoints.weightUnit"));
+}
+
 function anonymousData(language) {
   return {
     ...initialData,
@@ -103,6 +107,7 @@ function App() {
   const [displayRangeDraft, setDisplayRangeDraft] = useState({ start: "", end: "" });
   const [loginOpen, setLoginOpen] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem("betweenPoints.theme") || "dark");
+  const [weightUnit, setWeightUnit] = useState(savedWeightUnit);
   const language = data.user?.language || localStorage.getItem("betweenPoints.lang") || browserLanguage();
   const t = (key) => (dictionaries[language] || dictionaries.zh)[key] || key;
   const viewData = useMemo(() => data.user ? data : anonymousData(language), [data, language]);
@@ -113,6 +118,10 @@ function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("betweenPoints.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("betweenPoints.weightUnit", weightUnit);
+  }, [weightUnit]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -199,17 +208,27 @@ function App() {
             <TargetControl
               t={t}
               user={displayData.user}
+              weightUnit={weightUnit}
+              onWeightUnitChange={setWeightUnit}
               onSave={(targetWeightKg) => protectedRun(async () => applyServerState(await api.updateUser({ userId: data.user.id, targetWeightKg }), setData), "dataReady")}
             />
             <div className="range-control">
-              <label>
-                <span>{t("rangeStart")}</span>
-                <input type="date" value={displayRange.start} onChange={(event) => setDisplayRangeDraft((current) => ({ ...current, start: event.target.value }))} />
-              </label>
-              <label>
-                <span>{t("rangeEnd")}</span>
-                <input type="date" value={displayRange.end} onChange={(event) => setDisplayRangeDraft((current) => ({ ...current, end: event.target.value }))} />
-              </label>
+              <DatePickerField
+                t={t}
+                language={language}
+                label="rangeStart"
+                value={displayRange.start}
+                onChange={(value) => setDisplayRangeDraft((current) => ({ ...current, start: value }))}
+                testId="range-start"
+              />
+              <DatePickerField
+                t={t}
+                language={language}
+                label="rangeEnd"
+                value={displayRange.end}
+                onChange={(value) => setDisplayRangeDraft((current) => ({ ...current, end: value }))}
+                testId="range-end"
+              />
             </div>
             <button className="icon-button theme-toggle" title={t("theme")} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}>
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
@@ -232,10 +251,10 @@ function App() {
         </header>
         {toast && <p className="toast">{toast}</p>}
         {error && <p className="error">{error}</p>}
-        {route === "dashboard" && <Dashboard data={displayData} t={t} theme={theme} protectedRun={protectedRun} setData={setData} displayRange={displayRange} />}
-        {route === "analysis" && <Analysis data={displayData} t={t} theme={theme} />}
-        {route === "history" && <HistoryView data={displayData} t={t} filter={filter} setFilter={setFilter} protectedRun={protectedRun} setData={setData} />}
-        {route === "import" && <ImportView data={displayData} t={t} draftRows={draftRows} setDraftRows={setDraftRows} protectedRun={protectedRun} setData={setData} />}
+        {route === "dashboard" && <Dashboard data={displayData} t={t} language={language} theme={theme} weightUnit={weightUnit} protectedRun={protectedRun} setData={setData} displayRange={displayRange} />}
+        {route === "analysis" && <Analysis data={displayData} t={t} theme={theme} weightUnit={weightUnit} />}
+        {route === "history" && <HistoryView data={displayData} t={t} language={language} weightUnit={weightUnit} filter={filter} setFilter={setFilter} protectedRun={protectedRun} setData={setData} />}
+        {route === "import" && <ImportView data={displayData} t={t} language={language} weightUnit={weightUnit} draftRows={draftRows} setDraftRows={setDraftRows} protectedRun={protectedRun} setData={setData} />}
         {loginOpen && <LoginView t={t} error={error} onCancel={() => setLoginOpen(false)} onLogin={(account, password) => run(async () => {
           applyServerState(await api.login(account, password), setData);
           setLoginOpen(false);
@@ -277,60 +296,182 @@ function NavButton({ active, onClick, icon, label }) {
   return <button className={active ? "active" : ""} onClick={onClick}>{icon}<span>{label}</span></button>;
 }
 
-function TargetControl({ t, user, onSave }) {
-  const [target, setTarget] = useState(user.targetWeightKg ?? 68);
-  useEffect(() => setTarget(user.targetWeightKg ?? 68), [user.targetWeightKg]);
+function TargetControl({ t, user, weightUnit, onWeightUnitChange, onSave }) {
+  const [target, setTarget] = useState(displayWeightValue(user.targetWeightKg ?? 68, weightUnit));
+  useEffect(() => setTarget(displayWeightValue(user.targetWeightKg ?? 68, weightUnit)), [user.targetWeightKg, weightUnit]);
   return (
     <>
       <label className="compact">
-        <span>{t("targetWeight")}</span>
-        <input type="number" step="0.1" value={target} onChange={(event) => setTarget(event.target.value)} />
+        <span>{t("targetWeight")} ({displayWeightUnit(t, weightUnit)})</span>
+        <input type="number" step="any" min="0" value={target} onChange={(event) => setTarget(event.target.value)} />
       </label>
-      <button className="ghost" onClick={() => onSave(numberValue(target))}>{t("saveTarget")}</button>
+      <label className="compact">
+        <span>{t("weightUnit")}</span>
+        <select value={weightUnit} onChange={(event) => onWeightUnitChange(normalizeWeightUnit(event.target.value))}>
+          <option value="kg">{t("kg")}</option>
+          <option value="jin">{t("jin")}</option>
+        </select>
+      </label>
+      <button className="ghost" onClick={() => onSave(inputWeightToKg(target, weightUnit))}>{t("saveTarget")}</button>
     </>
   );
 }
 
-function Dashboard({ data, t, theme, protectedRun, setData, displayRange }) {
+function DatePickerField({ t, language, label, name, value, defaultValue, onChange, testId }) {
+  return (
+    <label className="date-picker-field">
+      <span>{t(label)}</span>
+      <DatePickerInput
+        t={t}
+        language={language}
+        ariaLabel={t(label)}
+        name={name}
+        value={value}
+        defaultValue={defaultValue}
+        onChange={onChange}
+        testId={testId || name}
+      />
+    </label>
+  );
+}
+
+function DatePickerInput({ t, language, ariaLabel, name, value, defaultValue, onChange, testId }) {
+  const ref = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [innerValue, setInnerValue] = useState(normalizeDateValue(defaultValue || today()));
+  const selectedValue = normalizeDateValue(value ?? innerValue);
+  const [calendarMonth, setCalendarMonth] = useState(monthValueForDate(selectedValue));
+  const weekdays = weekdayLabels(language);
+  const days = calendarDays(calendarMonth);
+
+  useEffect(() => {
+    if (value === undefined && defaultValue) setInnerValue(normalizeDateValue(defaultValue));
+  }, [defaultValue, value]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!ref.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  function openPicker() {
+    setCalendarMonth(monthValueForDate(selectedValue));
+    setOpen((current) => !current);
+  }
+
+  function commitDate(nextValue) {
+    const nextDate = normalizeDateValue(nextValue);
+    if (value === undefined) setInnerValue(nextDate);
+    onChange?.(nextDate);
+    setCalendarMonth(monthValueForDate(nextDate));
+    setOpen(false);
+  }
+
+  return (
+    <div className="date-picker" ref={ref} data-date-picker={testId || name || ""}>
+      <input
+        className="date-picker-value"
+        type="hidden"
+        name={name}
+        value={selectedValue}
+        data-date-picker-value={testId || name || ""}
+        onChange={(event) => commitDate(event.target.value)}
+      />
+      <button
+        className="date-picker-trigger"
+        type="button"
+        aria-label={`${ariaLabel || t("date")} ${selectedValue}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={openPicker}
+      >
+        <span className="date-picker-text">{selectedValue}</span>
+        <Calendar size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="date-picker-popover" role="dialog" aria-label={ariaLabel || t("date")}>
+          <div className="date-picker-head">
+            <button type="button" aria-label={t("previousMonth")} onClick={() => setCalendarMonth((current) => shiftCalendarMonth(current, -1))}>
+              <ChevronLeft size={16} aria-hidden="true" />
+            </button>
+            <strong data-calendar-month={calendarMonth}>{formatCalendarMonth(calendarMonth, language)}</strong>
+            <button type="button" aria-label={t("nextMonth")} onClick={() => setCalendarMonth((current) => shiftCalendarMonth(current, 1))}>
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
+          <div className="date-picker-grid" aria-hidden="true">
+            {weekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
+          </div>
+          <div className="date-picker-grid">
+            {days.map((day) => (
+              <button
+                className={`date-picker-day${day.inMonth ? "" : " outside"}${day.value === selectedValue ? " selected" : ""}`}
+                type="button"
+                key={day.value}
+                data-date-value={day.value}
+                aria-pressed={day.value === selectedValue}
+                onClick={() => commitDate(day.value)}
+              >
+                {day.day}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Dashboard({ data, t, language, theme, weightUnit, protectedRun, setData, displayRange }) {
   const latest = data.records.at(-1) || {};
-  const [weightDraft, setWeightDraft] = useState(fmt(latest.weightKg));
+  const [weightDraft, setWeightDraft] = useState(displayWeightValue(latest.weightKg, weightUnit));
   const [visibleWeightSeries, setVisibleWeightSeries] = useState({
     weight: true,
     ma7: true,
     ma14: true,
-    target: true,
+    target: false,
   });
-  useEffect(() => setWeightDraft(fmt(latest.weightKg)), [latest.weightKg]);
+  useEffect(() => setWeightDraft(displayWeightValue(latest.weightKg, weightUnit)), [latest.weightKg, weightUnit]);
   const chartPalette = chartTheme(theme);
   const changes = data.goalProgress?.changes || {};
   const weightSeriesOptions = [
-    { key: "weight", label: t("weightLine"), values: data.chartSeries.weights, tone: "cyan" },
-    { key: "ma7", label: t("ma7"), values: data.chartSeries.ma7, tone: "green" },
-    { key: "ma14", label: t("ma14"), values: data.chartSeries.ma14, tone: "amber" },
-    { key: "target", label: t("targetLine"), values: (data.chartSeries.weights || []).map(() => data.user.targetWeightKg), tone: "target" },
+    { key: "weight", label: t("weightLine"), values: kgSeriesToDisplay(data.chartSeries.weights, weightUnit), tone: "cyan" },
+    { key: "ma7", label: t("ma7"), values: kgSeriesToDisplay(data.chartSeries.ma7, weightUnit), tone: "green" },
+    { key: "ma14", label: t("ma14"), values: kgSeriesToDisplay(data.chartSeries.ma14, weightUnit), tone: "amber" },
+    { key: "target", label: t("targetLine"), values: (data.chartSeries.weights || []).map(() => kgToDisplayWeight(data.user.targetWeightKg, weightUnit)), tone: "target" },
   ];
   const visibleWeightDatasets = weightSeriesOptions.filter((item) => visibleWeightSeries[item.key]);
   return (
     <section className="dashboard-grid">
       <form className="panel control-panel" onSubmit={(event) => {
         event.preventDefault();
-        const payload = formRecord(new FormData(event.currentTarget), weightDraft);
+        const payload = formRecord(new FormData(event.currentTarget), weightDraft, weightUnit);
         protectedRun(async () => applyServerState(await api.saveRecord({ ...payload, userId: data.user.id }), setData), "saved");
       }}>
         <div className="panel-title"><h2>{t("todayCheckin")}</h2><span>{data.records.length} {t("records")}</span></div>
         <div className="form-grid">
-          <Field t={t} name="date" label="date" type="date" defaultValue={latest.date || today()} />
-          <label>{t("weight")} ({t("kg")})
+          <Field t={t} language={language} name="date" label="date" type="date" defaultValue={latest.date || today()} />
+          <label>{t("weight")} ({displayWeightUnit(t, weightUnit)})
             <div className="stepper">
-              <input name="weightKg" type="number" step="0.1" value={weightDraft} required onChange={(event) => setWeightDraft(event.target.value)} />
+              <input name="weightKg" type="number" step="any" min="0" value={weightDraft} required onChange={(event) => setWeightDraft(event.target.value)} />
               <div>
-                <button type="button" onClick={() => setWeightDraft((numberValue(weightDraft, 0) + 0.1).toFixed(1))}>▲</button>
-                <button type="button" onClick={() => setWeightDraft((numberValue(weightDraft, 0) - 0.1).toFixed(1))}>▼</button>
+                <button type="button" onClick={() => setWeightDraft((numberValue(weightDraft, 0) + displayWeightStep(weightUnit)).toFixed(1))}>▲</button>
+                <button type="button" onClick={() => setWeightDraft(Math.max(0, numberValue(weightDraft, 0) - displayWeightStep(weightUnit)).toFixed(1))}>▼</button>
               </div>
             </div>
           </label>
-          <Field t={t} name="sleepHours" label="sleep" type="number" step="0.1" defaultValue={latest.sleepHours} unit="hours" />
-          <Field t={t} name="exerciseCalories" label="exerciseCalories" type="number" step="1" defaultValue={latest.exerciseCalories} unit="kcal" />
+          <Field t={t} name="sleepHours" label="sleep" type="number" step="0.1" min="0" max="24" defaultValue={latest.sleepHours} unit="hours" />
+          <Field t={t} name="exerciseCalories" label="exerciseCalories" type="number" step="1" min="0" defaultValue={latest.exerciseCalories} unit="kcal" />
         </div>
         <label>{t("exerciseName")}<input name="exerciseName" defaultValue={latest.exerciseItems?.[0]?.name || ""} /></label>
         <label>{t("food")}<textarea name="foodText" placeholder={t("foodPlaceholder")} defaultValue={latest.foodText || ""} /></label>
@@ -355,25 +496,40 @@ function Dashboard({ data, t, theme, protectedRun, setData, displayRange }) {
         </div>
         <LineChart t={t} theme={theme} id="weightChart" labels={data.chartSeries.dates} datasets={visibleWeightDatasets} height={260} />
       </section>
-      <GoalPanel t={t} goal={data.goalProgress} />
-      <PredictionPanel t={t} predictions={data.predictions} />
+      <GoalPanel t={t} goal={data.goalProgress} weightUnit={weightUnit} />
+      <PredictionPanel t={t} predictions={data.predictions} weightUnit={weightUnit} />
       <section className="panel"><div className="panel-title"><h2>{t("exerciseChart")}</h2><span>{t("kcal")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.exerciseCalories, tone: "green" }]} height={170} /></section>
       <section className="panel"><div className="panel-title"><h2>{t("sleepChart")}</h2><span>{t("hours")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, tone: "amber" }]} height={170} /></section>
     </section>
   );
 }
 
-function Field({ t, name, label, type, step, defaultValue, unit }) {
-  return <label>{t(label)}{unit ? ` (${t(unit)})` : ""}<input name={name} type={type} step={step} defaultValue={fmt(defaultValue)} /></label>;
+function Field({ t, language, name, label, type, step, min, max, defaultValue, unit }) {
+  if (type === "date") {
+    return <DatePickerField t={t} language={language} name={name} label={label} defaultValue={fmt(defaultValue) || today()} />;
+  }
+  return <label>{t(label)}{unit ? ` (${t(unit)})` : ""}<input name={name} type={type} step={step} min={min} max={max} defaultValue={fmt(defaultValue)} /></label>;
 }
 
-function GoalPanel({ t, goal = {} }) {
+function numericBounds(name) {
+  if (name === "sleepHours") return { min: "0", max: "24" };
+  if (name === "weightKg" || name === "exerciseCalories") return { min: "0" };
+  return {};
+}
+
+function numericStep(name) {
+  if (name === "weightKg") return "any";
+  if (name === "sleepHours") return "0.1";
+  return "1";
+}
+
+function GoalPanel({ t, goal = {}, weightUnit }) {
   return (
     <section className="panel metric-panel">
       <div className="panel-title"><h2>{t("goalProgress")}</h2><span>{goal.completionPercent || 0}%</span></div>
       <div className="metric-list">
-        <Metric t={t} label="currentWeight" value={valueUnit(t, goal.currentWeightKg, "kg")} />
-        <Metric t={t} label="distance" value={valueUnit(t, goal.distanceKg, "kg")} />
+        <Metric t={t} label="currentWeight" value={weightUnitValue(t, goal.currentWeightKg, weightUnit)} />
+        <Metric t={t} label="distance" value={weightUnitValue(t, goal.distanceKg, weightUnit)} />
         <Metric t={t} label="completion" value={`${goal.completionPercent || 0}%`} />
         <Metric t={t} label="estimatedDate" value={goal.estimatedDate || "-"} />
       </div>
@@ -382,7 +538,7 @@ function GoalPanel({ t, goal = {} }) {
   );
 }
 
-function PredictionPanel({ t, predictions = [] }) {
+function PredictionPanel({ t, predictions = [], weightUnit }) {
   return (
     <section className="panel prediction-panel">
       <div className="panel-title"><h2>{t("prediction")}</h2><span>{predictions[0] ? t(predictions[0].confidence) : ""}</span></div>
@@ -390,7 +546,7 @@ function PredictionPanel({ t, predictions = [] }) {
         <>
           {predictions.map((item, index) => <article className="prediction-row" key={item.targetDate}>
             <strong>{index === 0 ? t("tomorrow") : t("dayAfter")} · {item.targetDate}</strong>
-            <span>{item.minWeightKg} - {item.maxWeightKg} {t("kg")}</span>
+            <span>{displayWeightValue(item.minWeightKg, weightUnit)} - {displayWeightValue(item.maxWeightKg, weightUnit)} {displayWeightUnit(t, weightUnit)}</span>
             <p>{item.factors.join(" · ")}</p>
           </article>)}
           <p className="muted">{predictions[0].suggestion}</p>
@@ -400,7 +556,7 @@ function PredictionPanel({ t, predictions = [] }) {
   );
 }
 
-function Analysis({ data, t, theme }) {
+function Analysis({ data, t, theme, weightUnit }) {
   const analysis = data.analysis || {};
   return (
     <section className="analysis-grid">
@@ -415,17 +571,17 @@ function Analysis({ data, t, theme }) {
         <div className="panel-title"><h2>{t("tagImpact")}</h2></div>
         <div className="bar-list">
           {(analysis.tagImpact || []).length ? analysis.tagImpact.map((item) => (
-            <div key={item.tag}><span>{t(item.tag)}</span><meter min="-1" max="1" value={item.averageDeltaKg} /><b>{item.averageDeltaKg} {t("kg")}</b></div>
+            <div key={item.tag}><span>{t(item.tag)}</span><meter min={weightUnit === "jin" ? "-2" : "-1"} max={weightUnit === "jin" ? "2" : "1"} value={kgToDisplayWeight(item.averageDeltaKg, weightUnit)} /><b>{displayWeightValue(item.averageDeltaKg, weightUnit)} {displayWeightUnit(t, weightUnit)}</b></div>
           )) : <p className="muted">{t("enoughDataHint")}</p>}
         </div>
       </section>
-      <section className="panel wide"><div className="panel-title"><h2>{t("sleepRelation")}</h2><span>{t("hours")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, tone: "amber" }, { values: data.chartSeries.weights, tone: "cyan" }]} height={240} /></section>
+      <section className="panel wide"><div className="panel-title"><h2>{t("sleepRelation")}</h2><span>{t("hours")}</span></div><LineChart t={t} theme={theme} labels={data.chartSeries.dates} datasets={[{ values: data.chartSeries.sleepHours, tone: "amber" }, { values: kgSeriesToDisplay(data.chartSeries.weights, weightUnit), tone: "cyan" }]} height={240} /></section>
       <section className="panel wide"><div className="panel-title"><h2>{t("predictionAccuracy")}</h2></div><p className="muted">{data.predictions?.[0]?.suggestion || t("emptyPrediction")}</p></section>
     </section>
   );
 }
 
-function HistoryView({ data, t, filter, setFilter, protectedRun, setData }) {
+function HistoryView({ data, t, language, weightUnit, filter, setFilter, protectedRun, setData }) {
   const rows = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     const sorted = [...data.records].sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -437,34 +593,40 @@ function HistoryView({ data, t, filter, setFilter, protectedRun, setData }) {
       <div className="panel-title"><h2>{t("history")}</h2><label className="compact">{t("filter")}<input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t("all")} /></label></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>{t("date")}</th><th>{t("weight")}</th><th>{t("food")}</th><th>{t("exerciseCalories")}</th><th>{t("sleep")}</th><th>{t("note")}</th><th /></tr></thead>
-          <tbody>{rows.length ? rows.map((record) => <HistoryRow key={record.date} record={record} data={data} t={t} protectedRun={protectedRun} setData={setData} />) : <tr><td colSpan="7">{t("noRows")}</td></tr>}</tbody>
+          <thead><tr><th>{t("date")}</th><th>{t("weight")} ({displayWeightUnit(t, weightUnit)})</th><th>{t("food")}</th><th>{t("exerciseCalories")}</th><th>{t("sleep")}</th><th>{t("note")}</th><th /></tr></thead>
+          <tbody>{rows.length ? rows.map((record) => <HistoryRow key={record.date} record={record} data={data} t={t} language={language} weightUnit={weightUnit} protectedRun={protectedRun} setData={setData} />) : <tr><td colSpan="7">{t("noRows")}</td></tr>}</tbody>
         </table>
       </div>
     </section>
   );
 }
 
-function HistoryRow({ record, data, t, protectedRun, setData }) {
-  const [row, setRow] = useState(rowFromRecord(record));
-  useEffect(() => setRow(rowFromRecord(record)), [record]);
+function HistoryRow({ record, data, t, language, weightUnit, protectedRun, setData }) {
+  const [row, setRow] = useState(rowFromRecord(record, weightUnit));
+  useEffect(() => setRow(rowFromRecord(record, weightUnit)), [record, weightUnit]);
   function setField(name, value) {
     setRow((current) => ({ ...current, [name]: value }));
   }
   return (
     <tr>
       {["date", "weightKg", "foodText", "exerciseCalories", "sleepHours", "note"].map((name) => (
-        <td key={name}><input name={name} type={["weightKg", "exerciseCalories", "sleepHours"].includes(name) ? "number" : name === "date" ? "date" : "text"} step={name === "sleepHours" || name === "weightKg" ? "0.1" : "1"} value={row[name]} onChange={(event) => setField(name, event.target.value)} /></td>
+        <td key={name}>
+          {name === "date" ? (
+            <DatePickerInput t={t} language={language} name={name} ariaLabel={t("date")} value={row[name]} onChange={(value) => setField(name, value)} testId={`history-${record.date}`} />
+          ) : (
+            <input name={name} type={["weightKg", "exerciseCalories", "sleepHours"].includes(name) ? "number" : "text"} step={numericStep(name)} {...numericBounds(name)} value={row[name]} onChange={(event) => setField(name, event.target.value)} />
+          )}
+        </td>
       ))}
       <td className="row-actions">
-        <button onClick={() => protectedRun(async () => applyServerState(await api.saveRecord({ ...serializeRow(row), userId: data.user.id }), setData), "saved")}><Save size={15} />{t("save")}</button>
+        <button onClick={() => protectedRun(async () => applyServerState(await api.saveRecord({ ...serializeRow(row, weightUnit), userId: data.user.id }), setData), "saved")}><Save size={15} />{t("save")}</button>
         <button onClick={() => protectedRun(async () => applyServerState(await api.deleteRecord(data.user.id, record.date), setData), "dataReady")}><Trash2 size={15} />{t("delete")}</button>
       </td>
     </tr>
   );
 }
 
-function ImportView({ data, t, draftRows, setDraftRows, protectedRun, setData }) {
+function ImportView({ data, t, language, weightUnit, draftRows, setDraftRows, protectedRun, setData }) {
   const [excelFile, setExcelFile] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   return (
@@ -480,7 +642,7 @@ function ImportView({ data, t, draftRows, setDraftRows, protectedRun, setData })
         <div className="button-row">
           <button className="primary" onClick={() => protectedRun(async () => {
             if (!excelFile) throw new Error(t("uploadExcel"));
-            const payload = await api.parseImportFile(excelFile.name, await fileToBase64(excelFile));
+            const payload = await api.parseImportFile(excelFile.name, await fileToBase64(excelFile), weightUnit);
             setDraftRows(payload.rows || []);
           }, "dataReady")}><Database size={16} />{t("parse")}</button>
           <button className="ghost" onClick={() => protectedRun(async () => setDraftRows([...draftRows, { date: today(), weightKg: "", foodText: "", exerciseCalories: "", sleepHours: "" }]))}>{t("addRow")}</button>
@@ -504,13 +666,13 @@ function ImportView({ data, t, draftRows, setDraftRows, protectedRun, setData })
         <div className="panel-title"><h2>{t("manualRows")}</h2><span>{draftRows.length}</span></div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>{t("date")}</th><th>{t("weight")}</th><th>{t("food")}</th><th>{t("exerciseCalories")}</th><th>{t("sleep")}</th><th>{t("note")}</th><th /></tr></thead>
-            <tbody>{draftRows.length ? draftRows.map((row, index) => <ImportRow key={index} row={row} index={index} draftRows={draftRows} setDraftRows={setDraftRows} t={t} />) : <tr><td colSpan="7">{t("noRows")}</td></tr>}</tbody>
+            <thead><tr><th>{t("date")}</th><th>{t("weight")} ({displayWeightUnit(t, weightUnit)})</th><th>{t("food")}</th><th>{t("exerciseCalories")}</th><th>{t("sleep")}</th><th>{t("note")}</th><th /></tr></thead>
+            <tbody>{draftRows.length ? draftRows.map((row, index) => <ImportRow key={index} row={row} index={index} draftRows={draftRows} setDraftRows={setDraftRows} t={t} language={language} weightUnit={weightUnit} />) : <tr><td colSpan="7">{t("noRows")}</td></tr>}</tbody>
           </table>
         </div>
         <div className="button-row">
           <button className="primary" onClick={() => protectedRun(async () => {
-            applyServerState(await api.confirmImport(data.user.id, draftRows.map(serializeRow)), setData);
+            applyServerState(await api.confirmImport(data.user.id, draftRows.map((row) => serializeRow(row, "kg"))), setData);
             setDraftRows([]);
           }, "saved")}><Save size={16} />{t("commitImport")}</button>
           <button className="ghost" onClick={() => protectedRun(async () => setDraftRows([]))}>{t("cancelImport")}</button>
@@ -520,7 +682,7 @@ function ImportView({ data, t, draftRows, setDraftRows, protectedRun, setData })
   );
 }
 
-function ImportRow({ row, index, draftRows, setDraftRows, t }) {
+function ImportRow({ row, index, draftRows, setDraftRows, t, language, weightUnit }) {
   const fields = ["date", "weightKg", "foodText", "exerciseCalories", "sleepHours", "note"];
   function update(name, value) {
     const next = draftRows.slice();
@@ -529,7 +691,21 @@ function ImportRow({ row, index, draftRows, setDraftRows, t }) {
   }
   return (
     <tr>
-      {fields.map((name) => <td key={name}><input type={["weightKg", "exerciseCalories", "sleepHours"].includes(name) ? "number" : name === "date" ? "date" : "text"} step={name === "sleepHours" || name === "weightKg" ? "0.1" : "1"} value={fmt(row[name])} onChange={(event) => update(name, event.target.value)} /></td>)}
+      {fields.map((name) => (
+        <td key={name}>
+          {name === "date" ? (
+            <DatePickerInput t={t} language={language} ariaLabel={t("date")} value={fmt(row[name]) || today()} onChange={(value) => update(name, value)} testId={`import-${index}`} />
+          ) : (
+            <input
+              type={["weightKg", "exerciseCalories", "sleepHours"].includes(name) ? "number" : "text"}
+              step={numericStep(name)}
+              {...numericBounds(name)}
+              value={name === "weightKg" ? displayWeightValue(row[name], weightUnit) : fmt(row[name])}
+              onChange={(event) => update(name, name === "weightKg" ? inputWeightToKg(event.target.value, weightUnit) : event.target.value)}
+            />
+          )}
+        </td>
+      ))}
       <td><button onClick={() => setDraftRows(draftRows.filter((_, rowIndex) => rowIndex !== index))}><Trash2 size={15} />{t("delete")}</button></td>
     </tr>
   );
@@ -537,6 +713,59 @@ function ImportRow({ row, index, draftRows, setDraftRows, t }) {
 
 function Metric({ t, label, value }) {
   return <div><span>{t(label)}</span><strong>{value}</strong></div>;
+}
+
+function normalizeDateValue(value) {
+  if (isDateValue(value)) return value;
+  return today();
+}
+
+function isDateValue(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return false;
+  const [year, month, day] = String(value).split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function monthValueForDate(value) {
+  return normalizeDateValue(value).slice(0, 7);
+}
+
+function shiftCalendarMonth(monthValue, delta) {
+  const [year, month] = monthValue.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}`;
+}
+
+function calendarDays(monthValue) {
+  const [year, month] = monthValue.split("-").map(Number);
+  const firstDay = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(Date.UTC(year, month - 1, 1 - firstDay + index));
+    return {
+      value: utcDateValue(date),
+      day: date.getUTCDate(),
+      inMonth: date.getUTCMonth() === month - 1,
+    };
+  });
+}
+
+function utcDateValue(date) {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function weekdayLabels(language) {
+  return language === "zh" ? ["日", "一", "二", "三", "四", "五", "六"] : ["S", "M", "T", "W", "T", "F", "S"];
+}
+
+function formatCalendarMonth(monthValue, language) {
+  const [year, month] = monthValue.split("-").map(Number);
+  if (language === "zh") return `${year}年${month}月`;
+  return new Intl.DateTimeFormat("en", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
 function LineChart({ t, theme = "dark", labels = [], datasets = [], height = 170 }) {
@@ -725,10 +954,10 @@ function filterChartSeriesByRange(series, range) {
   };
 }
 
-function formRecord(data, weightDraft) {
+function formRecord(data, weightDraft, weightUnit) {
   return {
     date: data.get("date"),
-    weightKg: numberValue(weightDraft),
+    weightKg: inputWeightToKg(weightDraft, weightUnit),
     foodText: data.get("foodText") || "",
     exerciseItems: data.get("exerciseName") ? [{ name: data.get("exerciseName"), durationMinutes: null, caloriesBurned: numberValue(data.get("exerciseCalories")) }] : [],
     exerciseCalories: numberValue(data.get("exerciseCalories"), 0),
@@ -738,10 +967,10 @@ function formRecord(data, weightDraft) {
   };
 }
 
-function rowFromRecord(record) {
+function rowFromRecord(record, weightUnit) {
   return {
     date: record.date || "",
-    weightKg: fmt(record.weightKg),
+    weightKg: displayWeightValue(record.weightKg, weightUnit),
     foodText: record.foodText || "",
     exerciseCalories: fmt(record.exerciseCalories),
     sleepHours: fmt(record.sleepHours),
@@ -749,10 +978,10 @@ function rowFromRecord(record) {
   };
 }
 
-function serializeRow(row) {
+function serializeRow(row, weightUnit = "kg") {
   return {
     date: row.date,
-    weightKg: numberValue(row.weightKg),
+    weightKg: inputWeightToKg(row.weightKg, weightUnit),
     foodText: row.foodText || "",
     exerciseCalories: numberValue(row.exerciseCalories, 0),
     sleepHours: numberValue(row.sleepHours),
@@ -780,8 +1009,49 @@ function fmt(value) {
   return value === null || value === undefined ? "" : String(value);
 }
 
-function valueUnit(t, value, unit) {
-  return value === null || value === undefined ? "-" : `${value} ${t(unit)}`;
+function normalizeWeightUnit(value) {
+  return value === "jin" ? "jin" : "kg";
+}
+
+function kgToDisplayWeight(value, weightUnit) {
+  const number = numberValue(value);
+  if (number === null) return null;
+  return normalizeWeightUnit(weightUnit) === "jin" ? number * 2 : number;
+}
+
+function inputWeightToKg(value, weightUnit) {
+  const number = numberValue(value);
+  if (number === null) return null;
+  return normalizeWeightUnit(weightUnit) === "jin" ? number / 2 : number;
+}
+
+function kgSeriesToDisplay(values = [], weightUnit) {
+  return values.map((value) => kgToDisplayWeight(value, weightUnit));
+}
+
+function displayWeightStep(weightUnit) {
+  return normalizeWeightUnit(weightUnit) === "jin" ? 0.2 : 0.1;
+}
+
+function displayWeightValue(value, weightUnit) {
+  const displayValue = kgToDisplayWeight(value, weightUnit);
+  if (displayValue === null) return "";
+  return formatWeightNumber(displayValue);
+}
+
+function weightUnitValue(t, value, weightUnit) {
+  const displayValue = displayWeightValue(value, weightUnit);
+  return displayValue === "" ? "-" : `${displayValue} ${displayWeightUnit(t, weightUnit)}`;
+}
+
+function displayWeightUnit(t, weightUnit) {
+  return normalizeWeightUnit(weightUnit) === "jin" ? t("jin") : t("kg");
+}
+
+function formatWeightNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "";
+  return String(Math.round((number + Number.EPSILON) * 100) / 100);
 }
 
 function browserLanguage() {

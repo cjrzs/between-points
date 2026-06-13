@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const main = readFileSync(resolve(root, "frontend", "src", "main.jsx"), "utf8");
 const styles = readFileSync(resolve(root, "frontend", "src", "styles.css"), "utf8");
+const i18n = readFileSync(resolve(root, "frontend", "src", "i18n.js"), "utf8");
 
 function assert(condition, message) {
   if (!condition) {
@@ -46,6 +47,11 @@ assert(
 );
 
 assert(
+  /const \[visibleWeightSeries,\s*setVisibleWeightSeries\]\s*=\s*useState\(\s*\{[\s\S]*?target:\s*false,/.test(main),
+  "weight trend target line should be available but hidden by default"
+);
+
+assert(
   main.includes("theme={theme}") &&
     /function LineChart\(\{\s*t,\s*theme\s*=/.test(main) &&
     /drawLineChart\(canvasRef\.current,\s*t,\s*labels,\s*datasets,\s*height,\s*theme\)/.test(main) &&
@@ -62,13 +68,23 @@ assert(
 );
 
 assert(
-  styles.includes('input[type="date"]::-webkit-calendar-picker-indicator') &&
-    styles.includes(':root[data-theme="light"] input[type="date"]') &&
-    styles.includes("data:image/svg+xml") &&
-    styles.includes("opacity: 0") &&
-    /input\[type="date"\]\s*\{[\s\S]*?position:\s*relative;/.test(styles) &&
-    /input\[type="date"\]::-webkit-calendar-picker-indicator\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*0;[\s\S]*?width:\s*44px;[\s\S]*?height:\s*100%;/.test(styles),
-  "date inputs should align the native picker hit area with the visible calendar icon"
+  main.includes("function DatePickerField") &&
+    main.includes("function DatePickerInput") &&
+    main.includes("<DatePickerField") &&
+    main.includes("<DatePickerInput") &&
+    !main.includes('<input type="date" value={displayRange.start}') &&
+    !main.includes('<input type="date" value={displayRange.end}'),
+  "date controls should use the custom React picker instead of native range date inputs"
+);
+
+assert(
+  styles.includes(".date-picker") &&
+    styles.includes(".date-picker-trigger") &&
+    styles.includes(".date-picker-popover") &&
+    styles.includes(".date-picker-grid") &&
+    styles.includes(".date-picker-day") &&
+    /date-picker-popover\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*0;/.test(styles),
+  "custom date picker should provide a right-anchored popover calendar"
 );
 
 assert(
@@ -78,6 +94,55 @@ assert(
     styles.includes(".brand-lockup") &&
     styles.includes(".brand-logo"),
   "web sidebar should include the shared Between Points logo beside the brand name"
+);
+
+assert(
+  /<Field\s+t=\{t\}\s+name="sleepHours"[\s\S]*?min="0"[\s\S]*?max="24"/.test(main) &&
+    main.includes("function numericBounds(name)") &&
+    main.includes('if (name === "sleepHours") return { min: "0", max: "24" };') &&
+    main.includes("{...numericBounds(name)}"),
+  "sleep hour inputs should set stable 0-24 bounds so 0.1-step browser validation accepts values like 7.00"
+);
+
+assert(
+  /<input\s+type="number"\s+step="any"\s+min="0"\s+value=\{target\}/.test(main) &&
+    /<input\s+name="weightKg"\s+type="number"\s+step="any"\s+min="0"/.test(main) &&
+    main.includes("function numericStep(name)") &&
+    main.includes('if (name === "weightKg") return "any";') &&
+    !main.includes('name === "sleepHours" || name === "weightKg" ? "0.1" : "1"'),
+  "weight inputs should accept any numeric decimal instead of triggering browser step mismatch prompts"
+);
+
+assert(
+  main.includes('localStorage.getItem("betweenPoints.weightUnit")') &&
+    main.includes('localStorage.setItem("betweenPoints.weightUnit", weightUnit)') &&
+    /<TargetControl[\s\S]*?weightUnit=\{weightUnit\}[\s\S]*?onWeightUnitChange=\{setWeightUnit\}/.test(main) &&
+    /function TargetControl\(\{\s*t,\s*user,\s*weightUnit,\s*onWeightUnitChange,\s*onSave\s*\}\)/.test(main) &&
+    /<input\s+type="number"\s+step="any"\s+min="0"\s+value=\{target\}[\s\S]*?<select\s+value=\{weightUnit\}[\s\S]*?<button\s+className="ghost"\s+onClick=\{\(\) => onSave\(inputWeightToKg\(target,\s*weightUnit\)\)\}/.test(main),
+  "target control should expose a kg/jin system weight-unit selector between target input and save"
+);
+
+assert(
+  i18n.includes('kg: "公斤"') &&
+    i18n.includes('jin: "斤"') &&
+    i18n.includes('kg: "kilograms"') &&
+    i18n.includes('jin: "catties"') &&
+    !i18n.includes('jin: "jin"'),
+  "weight unit labels should be localized as Chinese units in zh and natural English units in en"
+);
+
+assert(
+  main.includes('function kgToDisplayWeight(value, weightUnit)') &&
+    main.includes('function inputWeightToKg(value, weightUnit)') &&
+    main.includes('function displayWeightUnit(t, weightUnit)') &&
+    main.includes('parseImportFile(fileName, fileData, weightUnit = "kg")') &&
+    main.includes('JSON.stringify({ fileName, fileData, weightUnit })') &&
+    main.includes("api.parseImportFile(excelFile.name, await fileToBase64(excelFile), weightUnit)") &&
+    main.includes('formRecord(new FormData(event.currentTarget), weightDraft, weightUnit)') &&
+    main.includes('weightKg: inputWeightToKg(weightDraft, weightUnit)') &&
+    /<Dashboard[\s\S]*?weightUnit=\{weightUnit\}/.test(main) &&
+    /<HistoryView[\s\S]*?weightUnit=\{weightUnit\}/.test(main),
+  "visible weight UI should use the selected unit while saving the existing weightKg API field"
 );
 
 const gridRule = styles.match(/\.dashboard-grid,\s*\.analysis-grid,\s*\.import-grid\s*\{[\s\S]*?gap:\s*(\d+)px;/);

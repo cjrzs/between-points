@@ -30,6 +30,9 @@ assert.equal(appConfig.tabBar.list.length, 4, "mini program should expose four c
 assert.equal(appConfig.window.navigationBarTitleText, "Between Points");
 
 const apiClient = readFileSync(resolve(miniRoot, "utils", "api.js"), "utf8");
+const appJs = readFileSync(resolve(miniRoot, "app.js"), "utf8");
+assert.match(appJs, /apiBaseUrl:\s*"https:\/\/weight\.whisperer\.top"/, "mini program should default to the production API base URL");
+assert.match(apiClient, /"https:\/\/weight\.whisperer\.top"/, "API client fallback should use the production API base URL");
 assert.match(apiClient, /wx\.login/, "API client should use wx.login for WeChat auth");
 assert.match(apiClient, /\/api\/wechat\/login/, "API client should call backend WeChat login route");
 assert.match(apiClient, /Authorization/, "API client should attach bearer token to requests");

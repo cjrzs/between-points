@@ -5,7 +5,7 @@ const API_BASE_KEY = "bp.apiBaseUrl";
 
 function apiBaseUrl() {
   const app = getApp();
-  return wx.getStorageSync(API_BASE_KEY) || (app.globalData && app.globalData.apiBaseUrl) || "http://127.0.0.1:4173";
+  return wx.getStorageSync(API_BASE_KEY) || (app.globalData && app.globalData.apiBaseUrl) || "https://weight.whisperer.top";
 }
 
 function request(path, options) {

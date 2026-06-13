@@ -34,7 +34,8 @@ async function main() {
   await waitFor(page, "document.querySelector('.app-shell') && !document.querySelector('.login-page')");
   await waitFor(page, "document.querySelector('.control-panel')");
   await waitFor(page, "document.querySelector('.brand-logo')?.getAttribute('src')?.includes('between-points-avatar')");
-  await waitFor(page, "document.querySelectorAll('.range-control input[type=\"date\"]').length === 2");
+  await waitFor(page, "document.querySelectorAll('.range-control .date-picker').length === 2");
+  await waitFor(page, "document.querySelectorAll('.range-control input[type=\"date\"]').length === 0");
   await waitFor(page, "document.querySelector('.account-chip')?.dataset.auth === 'anonymous'");
 
   await page.evaluate(`
@@ -73,6 +74,38 @@ async function main() {
     (() => {
       const actions = document.querySelector('.top-actions');
       return actions && !actions.textContent.includes(${JSON.stringify(account)}) && actions.querySelector('button[title]');
+    })()
+  `);
+  await waitFor(page, `
+    (() => {
+      const input = document.querySelector('[name="sleepHours"]');
+      return input && input.min === '0' && input.max === '24';
+    })()
+  `);
+  await page.evaluate(`
+    (() => {
+      const input = document.querySelector('[name="sleepHours"]');
+      const setter = Object.getOwnPropertyDescriptor(input.constructor.prototype, 'value').set;
+      setter.call(input, '7.00');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      if (!input.checkValidity()) throw new Error(input.validationMessage);
+    })()
+  `);
+  await waitFor(page, `
+    (() => {
+      const input = document.querySelector('[name="weightKg"]');
+      return input && input.step === 'any' && input.min === '0';
+    })()
+  `);
+  await page.evaluate(`
+    (() => {
+      const input = document.querySelector('[name="weightKg"]');
+      const setter = Object.getOwnPropertyDescriptor(input.constructor.prototype, 'value').set;
+      setter.call(input, '72.34');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      if (!input.checkValidity()) throw new Error(input.validationMessage);
     })()
   `);
 
@@ -120,7 +153,7 @@ async function main() {
   await waitFor(page, "!document.querySelector('.account-chip') && document.querySelector('.top-actions button[title]')");
   await waitFor(page, `
     (() => {
-      const [start, end] = document.querySelectorAll('.range-control input[type="date"]');
+      const [start, end] = document.querySelectorAll('.range-control .date-picker-value');
       const now = new Date();
       const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
       const shifted = new Date(today + 'T00:00:00.000Z');
@@ -129,20 +162,9 @@ async function main() {
     })()
   `);
 
-  await page.evaluate(`
-    (() => {
-      const [start, end] = document.querySelectorAll('.range-control input[type="date"]');
-      const setNativeValue = (element, value) => {
-        const setter = Object.getOwnPropertyDescriptor(element.constructor.prototype, 'value').set;
-        setter.call(element, value);
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-      };
-      setNativeValue(end, '2026-06-07');
-      setNativeValue(start, '2025-01-01');
-    })()
-  `);
-  await waitFor(page, "document.querySelectorAll('.range-control input[type=\"date\"]')[0].value === '2025-12-07'");
+  await pickRangeDate(page, 1, "2026-06-07");
+  await pickRangeDate(page, 0, "2025-01-01");
+  await waitFor(page, "document.querySelectorAll('.range-control .date-picker-value')[0].value === '2025-12-07'");
 
   await page.evaluate("document.querySelectorAll('.nav button')[2].click()");
   await waitFor(page, `
@@ -210,7 +232,7 @@ async function main() {
     JSON.stringify({
       title: document.title,
       hasDashboard: Boolean(document.querySelector('.control-panel')),
-      hasDateRange: document.querySelectorAll('.range-control input[type="date"]').length,
+      hasDateRange: document.querySelectorAll('.range-control .date-picker').length,
       theme: document.documentElement.dataset.theme,
       bodyLength: document.body.innerText.length,
       canvasCount: document.querySelectorAll('canvas').length
@@ -230,6 +252,47 @@ async function connectToPage() {
     await delay(500);
   }
   throw new Error("Chrome DevTools endpoint did not become ready");
+}
+
+async function pickRangeDate(page, pickerIndex, targetDate) {
+  const targetMonth = targetDate.slice(0, 7);
+  await page.evaluate(`
+    (() => {
+      const trigger = document.querySelectorAll('.range-control .date-picker-trigger')[${pickerIndex}];
+      if (!trigger) throw new Error('date picker trigger ${pickerIndex} not found');
+      trigger.click();
+    })()
+  `);
+  await waitFor(page, "document.querySelector('.date-picker-popover [data-calendar-month]')");
+
+  let currentMonth = await page.evaluate("document.querySelector('.date-picker-popover [data-calendar-month]')?.dataset.calendarMonth");
+  let guard = 24;
+  while (currentMonth !== targetMonth && guard > 0) {
+    const buttonIndex = currentMonth > targetMonth ? 0 : 1;
+    const previousMonth = currentMonth;
+    await page.evaluate(`
+      (() => {
+        const button = document.querySelectorAll('.date-picker-head button')[${buttonIndex}];
+        if (!button) throw new Error('calendar navigation button not found');
+        button.click();
+      })()
+    `);
+    await waitFor(page, `document.querySelector('.date-picker-popover [data-calendar-month]')?.dataset.calendarMonth !== ${JSON.stringify(previousMonth)}`);
+    currentMonth = await page.evaluate("document.querySelector('.date-picker-popover [data-calendar-month]')?.dataset.calendarMonth");
+    guard -= 1;
+  }
+
+  if (currentMonth !== targetMonth) {
+    throw new Error(`Could not navigate date picker to ${targetMonth}`);
+  }
+
+  await page.evaluate(`
+    (() => {
+      const day = document.querySelector('.date-picker-day[data-date-value="${targetDate}"]');
+      if (!day) throw new Error('date ${targetDate} not found');
+      day.click();
+    })()
+  `);
 }
 
 async function waitFor(page, expression) {
@@ -272,7 +335,20 @@ class CdpPage {
     const id = this.nextId++;
     this.socket.send(JSON.stringify({ id, method, params }));
     return new Promise((resolveSend, rejectSend) => {
-      this.pending.set(id, { resolveSend, rejectSend });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        rejectSend(new Error(`CDP command timed out: ${method}`));
+      }, 20000);
+      this.pending.set(id, {
+        resolveSend: (value) => {
+          clearTimeout(timer);
+          resolveSend(value);
+        },
+        rejectSend: (error) => {
+          clearTimeout(timer);
+          rejectSend(error);
+        },
+      });
     });
   }
 
